@@ -1,118 +1,91 @@
 # vrtx
 
-vrtx 是 Vortex（涡流）的缩写，当前旨在聚合 Windows 上的快捷方式、浏览器书签，方便我的其他工具集成调用。
+vrtx（Vortex / 涡流）是一个 Windows 工具，用于聚合浏览器书签和系统快捷方式，统一输出为 `.url` 和 `.lnk` 文件，方便其他工具集成调用。
 
-最终，vrtx 的资源聚合目录可以改为用户 Temp 目录下的 eggroll-vrtx 文件夹。
+## 功能
 
-AutoHotkey 提取的逻辑如下：
+### 浏览器书签
+自动从 **Chrome** 和 **Edge** 的书签 JSON 文件中递归提取所有书签，按收藏夹目录结构命名，输出为 `.url` 快捷方式文件（可以直接双击打开）。
 
-```ahk
-InitShortcuts() {
-    static initialized := false
+输出格式：`书签名称-收藏夹路径-域名.url`
 
-    if initialized {
-        return
-    }
-    initialized := true
+### Windows 快捷方式
+从以下路径提取 `.lnk` 快捷方式：
 
-    global shortcutsDir
-    shortcutsDir := A_Temp "\WindowJump_Shortcuts"
+| 来源 | 路径 |
+|---|---|
+| 开始菜单 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs` |
+| 公共开始菜单 | `%ProgramData%\Microsoft\Windows\Start Menu\Programs` |
+| Windows Apps | 通过 COM 枚举 `shell:AppsFolder` |
+| 最近文件 | `%APPDATA%\Microsoft\Windows\Recent` |
+| Office 最近 | `%APPDATA%\Microsoft\Office\Recent` |
 
-    LogInfo("初始化快捷方式目录：" . shortcutsDir, , WindowJumpDebug.mode)
+### 文件监控
+在监控模式下，定期检测书签文件和快捷方式目录的变更，自动增量重建输出。
 
-    if DirExist(shortcutsDir) {
-        loop files, shortcutsDir "\*", "FD" {
-            try FileDelete(A_LoopFileFullPath)
-        }
-    } else {
-        DirCreate(shortcutsDir)
-    }
+## 使用
 
-    try {
-        if DirExist(A_ProgramsCommon) {
-            FileCopy(A_ProgramsCommon "\*.lnk", shortcutsDir "\", true)
-        }
-        if DirExist(A_Programs) {
-            FileCopy(A_Programs "\*.lnk", shortcutsDir "\", true)
-        }
-    }
-
-    try {
-        oFolder := ComObject("Shell.Application").NameSpace("shell:AppsFolder")
-        if (Type(oFolder) != "String") {
-            for item in oFolder.Items {
-                shortcutPath := shortcutsDir "\" item.Name ".lnk"
-                if !FileExist(shortcutPath) {
-                    try FileCreateShortcut("shell:appsfolder\" item.Path, shortcutPath)
-                }
-            }
-        }
-    }
-
-    LogInfo("快捷方式初始化完成", , WindowJumpDebug.mode)
-}
-
-GetShortcuts(&shortcuts) {
-    global shortcutsDir
-    shortcuts := []
-
-    if !DirExist(shortcutsDir) {
-        LogInfo("快捷方式目录不存在，初始化", , WindowJumpDebug.mode)
-        InitShortcuts()
-    }
-
-    loop files, shortcutsDir "\*.lnk", "F" {
-        try {
-            name := StrReplace(A_LoopFileName, ".lnk", "")
-            shortcuts.Push({ name: name, path: A_LoopFileFullPath })
-        }
-    }
-
-    LogInfo("获取到 " . shortcuts.Length . " 个快捷方式", , WindowJumpDebug.mode)
-}
+```
+vrtx [选项]
 ```
 
-现需要将这个逻辑迁移到 go，并最好使用并发来加速文件提取操作。
+### 选项
 
-还需要加入涡流的路径有：（带 Roaming 的那个，我不确定我的环境变量是对的）
+| 选项 | 默认值 | 说明 |
+|---|---|---|
+| `-watch` | `true` | 启用监控模式，检测到变更时自动重建 |
+| `-interval` | `1s` | 监控轮询间隔 |
+| `-bookmarks` | `true` | 提取浏览器书签 |
+| `-shortcuts` | `true` | 提取 Windows 快捷方式 |
+| `-out` | `%TEMP%\eggroll-vrtx` | 输出目录 |
+| `-clean` | `false` | 清除所有输出文件后退出 |
 
-- `%APPDATA%\Microsoft\Windows\Recent`
-- `%APPDATA%\Microsoft\Office\Recent`
+### 示例
 
-功能二：
+```bash
+# 默认：提取全部并持续监控
+vrtx
 
-浏览器书签提取。
+# 仅提取书签
+vrtx -shortcuts=false
 
-浏览器的书签本质上就是一个 json 文件，路径如下：
+# 仅提取快捷方式，不监控
+vrtx -watch=false -bookmarks=false
 
-`C:\Users\EggRoll\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks`
+# 自定义输出目录
+vrtx -out D:\MyShortcuts
 
-其中，其字段如下：
-
-```json
-{
-  "checksum": "d41d8cd98f00b204e9800998ecf8427e",
-  "roots": {
-    "bookmark_bar": {
-      "children": [
-        {
-          "date_added": "13217472000000000",
-          "id": "1",
-          "name": "Example Bookmark",
-          "type": "url",
-          "url": "https://www.example.com"
-        }
-      ],
-      "date_added": "13217472000000000",
-      "date_modified": "13217472000000000",
-      "id": "0",
-      "name": "Bookmarks Bar",
-      "type": "folder"
-    },
-    // 其他根节点...
-  },
-  // 其他字段...
-}
+# 清理残留
+vrtx -clean
 ```
 
-需要利用 go 的强大 json 解析能力和并发能力，快速把所有的 url 提取出来，构造成 Windows 的 url 快捷方式，方便直接双击打开。
+## 输出结构
+
+```
+%TEMP%\eggroll-vrtx\
+├── Bookmarks\                  # 浏览器书签
+│   ├── GitHub-开发-github.com.url
+│   ├── YouTube-娱乐-youtube.com.url
+│   └── ...
+├── Shortcuts\                  # Windows 快捷方式
+│   ├── StartMenu\              # 开始菜单
+│   │   ├── 计算器.lnk
+│   │   └── ...
+│   ├── WindowsApps\            # Windows Apps
+│   │   ├── Spotify.lnk
+│   │   └── ...
+│   └── Recent\                 # 最近文件
+│       └── ...
+```
+
+## 构建
+
+```bash
+go build -ldflags="-s -w" -o vrtx.exe .
+```
+
+需要 Go 1.21+，无外部依赖。
+
+## 许可证
+
+GPLv3
