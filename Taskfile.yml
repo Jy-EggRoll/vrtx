@@ -1,14 +1,23 @@
 version: "3"
 
+vars:
+  VERSION:
+    sh: echo "1.0.$(date -u +%Y%m%d).$(date -u +%H%M)"
+
 tasks:
   default:
     cmds:
       - task: windows
 
   generate:
-    desc: 生成 Windows 资源文件（图标、版本信息）
+    desc: 生成 Windows 资源文件（图标 + 版本号）
     cmds:
-      - go generate ./...
+      - goversioninfo -file-version={{.VERSION}} -product-version={{.VERSION}} versioninfo.json
+    sources:
+      - versioninfo.json
+      - assets/icon.ico
+    generates:
+      - resource.syso
 
   windows:
     desc: 构建 Windows amd64 版本
@@ -23,8 +32,6 @@ tasks:
     desc: 构建 Linux amd64 版本
     cmds:
       - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o vrtx .
-    generates:
-      - vrtx
 
   run:
     desc: 直接运行
