@@ -40,7 +40,7 @@ vrtx [选项]
 | `-interval`  | `1s`                  | 监控轮询间隔                       |
 | `-bookmarks` | `true`                | 提取浏览器书签                     |
 | `-shortcuts` | `true`                | 提取 Windows 快捷方式              |
-| `-out`       | `%TEMP%\eggroll-vrtx` | 输出目录                           |
+| `-out`       | `%TEMP%\VRTX`         | 输出目录                           |
 | `-clean`     | `false`               | 清除所有输出文件后退出             |
 
 ### 示例
@@ -68,7 +68,7 @@ vrtx -clean
 ## 输出结构
 
 ```
-%TEMP%\eggroll-vrtx\
+%TEMP%\VRTX\
 ├── Bookmarks\                  # 浏览器书签
 │   ├── GitHub-开发-github.com.url
 │   ├── YouTube-娱乐-youtube.com.url

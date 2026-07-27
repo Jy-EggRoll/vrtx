@@ -12,7 +12,7 @@ import (
 func main() {
 	watch := flag.Bool("watch", true, "启用监控模式，检测到变更时自动重建")
 	interval := flag.Duration("interval", 1*time.Second, "监控轮询间隔")
-	outDir := flag.String("out", "", "输出目录（默认：系统临时目录下的 eggroll-vrtx）")
+	outDir := flag.String("out", "", "输出目录（默认：系统临时目录下的 VRTX）")
 	clean := flag.Bool("clean", false, "清除所有输出文件后退出")
 	bookmarks := flag.Bool("bookmarks", true, "提取浏览器书签（Chrome / Edge）")
 	shortcuts := flag.Bool("shortcuts", true, "提取 Windows 快捷方式（开始菜单 / Windows Apps / 最近文件）")
@@ -74,5 +74,5 @@ func getOutputDir() string {
 		homeDir, _ := os.UserHomeDir()
 		tempDir = filepath.Join(homeDir, "AppData", "Local", "Temp")
 	}
-	return filepath.Join(tempDir, "eggroll-vrtx")
+	return filepath.Join(tempDir, "VRTX")
 }
