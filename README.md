@@ -5,22 +5,25 @@ vrtx（Vortex / 涡流）是一个 Windows 工具，用于聚合浏览器书签�
 ## 功能
 
 ### 浏览器书签
+
 自动从 **Chrome** 和 **Edge** 的书签 JSON 文件中递归提取所有书签，按收藏夹目录结构命名，输出为 `.url` 快捷方式文件（可以直接双击打开）。
 
 输出格式：`书签名称-收藏夹路径-域名.url`
 
 ### Windows 快捷方式
+
 从以下路径提取 `.lnk` 快捷方式：
 
-| 来源 | 路径 |
-|---|---|
-| 开始菜单 | `%APPDATA%\Microsoft\Windows\Start Menu\Programs` |
+| 来源         | 路径                                                  |
+| ------------ | ----------------------------------------------------- |
+| 开始菜单     | `%APPDATA%\Microsoft\Windows\Start Menu\Programs`     |
 | 公共开始菜单 | `%ProgramData%\Microsoft\Windows\Start Menu\Programs` |
-| Windows Apps | 通过 COM 枚举 `shell:AppsFolder` |
-| 最近文件 | `%APPDATA%\Microsoft\Windows\Recent` |
-| Office 最近 | `%APPDATA%\Microsoft\Office\Recent` |
+| Windows Apps | 通过 COM 枚举 `shell:AppsFolder`                      |
+| 最近文件     | `%APPDATA%\Microsoft\Windows\Recent`                  |
+| Office 最近  | `%APPDATA%\Microsoft\Office\Recent`                   |
 
 ### 文件监控
+
 在监控模式下，定期检测书签文件和快捷方式目录的变更，自动增量重建输出。
 
 ## 使用
@@ -31,14 +34,14 @@ vrtx [选项]
 
 ### 选项
 
-| 选项 | 默认值 | 说明 |
-|---|---|---|
-| `-watch` | `true` | 启用监控模式，检测到变更时自动重建 |
-| `-interval` | `1s` | 监控轮询间隔 |
-| `-bookmarks` | `true` | 提取浏览器书签 |
-| `-shortcuts` | `true` | 提取 Windows 快捷方式 |
-| `-out` | `%TEMP%\eggroll-vrtx` | 输出目录 |
-| `-clean` | `false` | 清除所有输出文件后退出 |
+| 选项         | 默认值                | 说明                               |
+| ------------ | --------------------- | ---------------------------------- |
+| `-watch`     | `true`                | 启用监控模式，检测到变更时自动重建 |
+| `-interval`  | `1s`                  | 监控轮询间隔                       |
+| `-bookmarks` | `true`                | 提取浏览器书签                     |
+| `-shortcuts` | `true`                | 提取 Windows 快捷方式              |
+| `-out`       | `%TEMP%\eggroll-vrtx` | 输出目录                           |
+| `-clean`     | `false`               | 清除所有输出文件后退出             |
 
 ### 示例
 
