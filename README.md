@@ -52,6 +52,9 @@ vrtx
 # 仅提取书签
 vrtx -shortcuts=false
 
+# 仅提取书签，不监控
+vrtx -watch=false -shortcuts=false
+
 # 仅提取快捷方式，不监控
 vrtx -watch=false -bookmarks=false
 
@@ -87,7 +90,9 @@ vrtx -clean
 go build -ldflags="-s -w" -o vrtx.exe .
 ```
 
-需要 Go 1.21+，无外部依赖。
+在项目目录下执行即可编译出 `vrtx.exe`。需要 Go 1.21+，无外部依赖。
+
+Windows Apps 提取依赖 PowerShell（Windows 7+ 系统自带），其余功能使用纯 Go 实现。
 
 ## 许可证
 
