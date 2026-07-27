@@ -1,26 +1,54 @@
 package main
 
 import (
-	"log"
+	"flag"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 )
 
 func main() {
-	outputDir := getOutputDir()
+	watch := flag.Bool("watch", true, "启用监控模式，书签变更时自动重建")
+	interval := flag.Duration("interval", 1*time.Second, "监控轮询间隔")
+	outDir := flag.String("out", "", "输出目录（默认：系统临时目录下的 eggroll-vrtx）")
+	clean := flag.Bool("clean", false, "清除所有输出文件后退出")
+	flag.Parse()
 
-	// 清理并创建输出目录
-	os.RemoveAll(outputDir)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		log.Fatalf("Failed to create output dir: %v", err)
+	outputDir := *outDir
+	if outputDir == "" {
+		outputDir = getOutputDir()
 	}
 
-	log.Printf("Vortex: %s", outputDir)
+	if *clean {
+		if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+			logInfo("输出目录不存在，无需清理: %s", outputDir)
+		} else {
+			os.RemoveAll(outputDir)
+			logInfo("已清除所有输出文件: %s", outputDir)
+		}
+		return
+	}
 
-	log.Println("Extracting bookmarks...")
+	os.RemoveAll(outputDir)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		logFatal("无法创建输出目录: %v", err)
+	}
+
+	logInfo("Vortex 输出目录: %s", outputDir)
+	logInfo("正在提取书签...")
 	extractBookmarks(outputDir)
 
-	log.Println("Vortex complete!")
+	if !*watch {
+		logInfo("提取完成！")
+		return
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	startWatch(outputDir, *interval, sigCh)
 }
 
 func getOutputDir() string {
