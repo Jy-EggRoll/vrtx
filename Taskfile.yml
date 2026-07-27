@@ -1,0 +1,37 @@
+version: "3"
+
+tasks:
+  default:
+    cmds:
+      - task: windows
+
+  generate:
+    desc: 生成 Windows 资源文件（图标、版本信息）
+    cmds:
+      - go generate ./...
+
+  windows:
+    desc: 构建 Windows amd64 版本
+    deps:
+      - generate
+    cmds:
+      - GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o vrtx.exe .
+    generates:
+      - vrtx.exe
+
+  linux:
+    desc: 构建 Linux amd64 版本
+    cmds:
+      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o vrtx .
+    generates:
+      - vrtx
+
+  run:
+    desc: 直接运行
+    cmds:
+      - go run .
+
+  clean:
+    desc: 清理构建产物
+    cmds:
+      - rm -f vrtx vrtx.exe resource.syso
