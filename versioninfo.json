@@ -1,0 +1,22 @@
+{
+  "IconPath": "assets/icon.ico",
+  "FixedFileInfo": {
+    "FileVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    },
+    "ProductVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    }
+  },
+  "StringFileInfo": {
+    "FileDescription": "VRTX - \u6da1\u6d41",
+    "ProductName": "VRTX",
+    "InternalName": "vrtx"
+  }
+}
