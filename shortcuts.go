@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+func powershell(script string) *exec.Cmd {
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	hideWindow(cmd)
+	return cmd
+}
+
 func extractShortcuts(outputDir string) {
 	shortcutDir := filepath.Join(outputDir, "Shortcuts")
 	os.MkdirAll(shortcutDir, 0755)
