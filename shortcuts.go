@@ -116,7 +116,8 @@ $wshell = New-Object -ComObject WScript.Shell
 $items = @(
     @{Name="回收站"; Path="shell:RecycleBinFolder"},
     @{Name="此电脑"; Path="shell:MyComputerFolder"},
-    @{Name="用户目录"; Path="shell:UsersFilesFolder"}
+    @{Name="用户目录"; Path="shell:UsersFilesFolder"},
+    @{Name="开机启动"; Path="shell:Startup"}
 )
 
 foreach ($item in $items) {
