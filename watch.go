@@ -21,6 +21,7 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 	}
 
 	var shortcutModTimes map[string]time.Time
+	var lastDrives []string
 	if watchShortcuts {
 		shortcutModTimes = make(map[string]time.Time)
 		for _, dir := range getShortcutSrcDirs() {
@@ -28,6 +29,7 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 				shortcutModTimes[dir] = fi.ModTime()
 			}
 		}
+		lastDrives = getAvailableDrives()
 	}
 
 	logInfo("监控已启动，轮询间隔 %v（按 Ctrl+C 停止）", interval)
@@ -69,6 +71,13 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 						changed = true
 					}
 				}
+
+				drives := getAvailableDrives()
+				if !driveListsEqual(drives, lastDrives) {
+					lastDrives = drives
+					changed = true
+				}
+
 				if changed {
 					logInfo("检测到快捷方式变更，正在重建...")
 					os.RemoveAll(filepath.Join(outputDir, "Shortcuts"))
@@ -82,4 +91,16 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 			return
 		}
 	}
+}
+
+func driveListsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

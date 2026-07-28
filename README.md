@@ -22,6 +22,7 @@ vrtx（Vortex / 涡流）是一个 Windows 工具，用于聚合浏览器书签�
 | 最近文件     | `%APPDATA%\Microsoft\Windows\Recent`                  |
 | Office 最近  | `%APPDATA%\Microsoft\Office\Recent`                   |
 | 系统位置     | 回收站 / 此电脑 / 用户目录 / 开机启动（通过 `shell:`）|
+| 磁盘根目录   | 所有可用盘符 C:\ D:\ ...（U 盘即插即识别）          |
 
 ### 文件监控
 
@@ -83,11 +84,15 @@ vrtx -clean
 │   │   └── ...
 │   ├── Recent\                 # 最近文件
 │   │   └── ...
-│   └── System\                 # 系统位置
-    │       ├── 回收站.lnk
-    │       ├── 此电脑.lnk
-    │       ├── 用户目录.lnk
-    │       └── 开机启动.lnk
+    │   ├── System\                 # 系统位置
+    │   │   ├── 回收站.lnk
+    │   │   ├── 此电脑.lnk
+    │   │   ├── 用户目录.lnk
+    │   │   └── 开机启动.lnk
+    │   └── Drives\                 # 磁盘根目录
+    │       ├── C盘.lnk
+    │       ├── D盘.lnk
+    │       └── ...
 ```
 
 ## 构建

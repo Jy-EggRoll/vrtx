@@ -38,6 +38,12 @@ func extractShortcuts(outputDir string) {
 		extractSystemShortcuts(shortcutDir)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		extractDriveShortcuts(shortcutDir)
+	}()
+
 	wg.Wait()
 }
 
@@ -138,6 +144,55 @@ foreach ($item in $items) {
 	if err != nil {
 		logWarn("提取系统快捷方式失败: %v\n%s", err, out)
 	}
+}
+
+func extractDriveShortcuts(shortcutDir string) {
+	targetDir := filepath.Join(shortcutDir, "Drives")
+	os.MkdirAll(targetDir, 0755)
+
+	drives := getAvailableDrives()
+	if len(drives) == 0 {
+		return
+	}
+
+	driveList := strings.Join(drives, ",")
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", `
+$dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
+$drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
+$wshell = New-Object -ComObject WScript.Shell
+foreach ($drive in $drives) {
+    $name = $drive + "盘"
+    $path = Join-Path $dir ($name + ".lnk")
+    if (!(Test-Path $path)) {
+        try {
+            $s = $wshell.CreateShortcut($path)
+            $s.TargetPath = $drive + ":\"
+            $s.Save()
+        } catch { }
+    }
+}
+`)
+	cmd.Env = append(os.Environ(),
+		"VRTX_DRIVES_DIR="+targetDir,
+		"VRTX_DRIVE_LIST="+driveList,
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		logWarn("提取驱动器快捷方式失败: %v\n%s", err, out)
+	}
+}
+
+func getAvailableDrives() []string {
+	var drives []string
+	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
+		path := string(letter) + ":\\"
+		if _, err := os.Stat(path); err == nil {
+			drives = append(drives, string(letter))
+		}
+	}
+	return drives
 }
 
 func copyLnkFiles(srcDir, dstDir string) {
