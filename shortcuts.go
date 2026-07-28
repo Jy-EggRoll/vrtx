@@ -168,7 +168,7 @@ $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell
 foreach ($drive in $drives) {
-    $name = $drive + "盘"
+    $name = $drive
     $path = Join-Path $dir ($name + ".lnk")
     if (!(Test-Path $path)) {
         try {
