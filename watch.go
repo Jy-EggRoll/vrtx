@@ -6,10 +6,14 @@ import (
 	"time"
 )
 
+// startWatch 以轮询方式监控文件变更，直到收到退出信号。
+// 监控架构：time.Ticker 周期性触发 → 对比文件 ModTime 判断是否变化 → 增量重建。
+// 书签和快捷方式的检测相互独立，各自判断各自重建。
 func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal, watchBookmarks, watchShortcuts bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// 首次运行记录基线时间戳，后续轮询与之比较来判断是否发生变化
 	var bookmarkModTimes map[string]time.Time
 	if watchBookmarks {
 		bookmarkModTimes = make(map[string]time.Time)
@@ -37,6 +41,7 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 	for {
 		select {
 		case <-ticker.C:
+			// 书签变更检测：比较每个书签文件的 mtime
 			if watchBookmarks {
 				changed := false
 				for _, p := range getBookmarkPaths() {
@@ -58,6 +63,7 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 				}
 			}
 
+			// 快捷方式变更检测：比较源目录的 mtime 以及可用盘符变化
 			if watchShortcuts {
 				changed := false
 				for _, dir := range getShortcutSrcDirs() {
@@ -93,6 +99,8 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 	}
 }
 
+// driveListsEqual 比较两个盘符列表是否相同。
+// 不做排序对比，因为盘符顺序本身具有稳定性（C 永远在 D 前面）。
 func driveListsEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

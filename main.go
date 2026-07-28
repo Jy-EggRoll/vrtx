@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// main 是程序入口，执行流程：
+//   1. 解析命令行参数
+//   2. 如果 --clean 则清理输出目录后直接退出
+//   3. 清空并重建输出目录
+//   4. 提取书签和快捷方式（根据 flags）
+//   5. 如果 --watch=true，进入监控循环（轮询检测变更并增量重建）
+//   6. 如果 --watch=false，提取完成后直接退出
 func main() {
 	watch := flag.Bool("watch", true, "启用监控模式，检测到变更时自动重建")
 	interval := flag.Duration("interval", 1*time.Second, "监控轮询间隔")
@@ -38,6 +45,7 @@ func main() {
 		return
 	}
 
+	// 每次启动先清空输出目录，避免上次残留文件干扰增量结果
 	os.RemoveAll(outputDir)
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		logFatal("无法创建输出目录: %v", err)
@@ -65,6 +73,8 @@ func main() {
 	startWatch(outputDir, *interval, sigCh, *bookmarks, *shortcuts)
 }
 
+// getOutputDir 按 TEMP → TMP → AppData\Local\Temp 优先级 fallback 获取临时目录，
+// 并在其下追加 VRTX 子目录作为默认输出路径。
 func getOutputDir() string {
 	tempDir := os.Getenv("TEMP")
 	if tempDir == "" {

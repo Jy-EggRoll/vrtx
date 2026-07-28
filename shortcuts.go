@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -8,12 +10,19 @@ import (
 	"sync"
 )
 
+// powershell 封装 PowerShell 调用，固定 -NoProfile -NonInteractive -ExecutionPolicy Bypass 参数
+// 以避免用户配置文件干扰、交互弹框和执行策略限制
 func powershell(script string) *exec.Cmd {
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	hideWindow(cmd)
 	return cmd
 }
 
+// extractShortcuts 并发启动 5 个提取任务：
+//   开始菜单 → StartMenu/    Windows Apps → WindowsApps/
+//   最近文件  → Recent/       系统位置   → System/
+//   磁盘根目录 → Drives/
+// 各任务独立并行，全部完成后返回
 func extractShortcuts(outputDir string) {
 	shortcutDir := filepath.Join(outputDir, "Shortcuts")
 	os.MkdirAll(shortcutDir, 0755)
@@ -72,6 +81,10 @@ func extractStartMenuShortcuts(shortcutDir string) {
 	}
 }
 
+// extractWindowsAppsShortcuts 通过 COM 枚举 shell:AppsFolder 虚拟文件夹，
+// 使用 PowerShell 创建 .lnk 快捷方式。
+// 之所以不走文件系统，是因为 Windows Apps 不在常规磁盘路径中，
+// 只能通过 Shell.Application COM 接口枚举。
 func extractWindowsAppsShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
@@ -152,6 +165,8 @@ foreach ($item in $items) {
 	}
 }
 
+// extractDriveShortcuts 为每个可用盘符创建 .lnk 快捷方式。
+// 盘符探测使用 os.Stat 检查根目录是否存在，从 C 开始（跳过 A/B 传统软驱）。
 func extractDriveShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "Drives")
 	os.MkdirAll(targetDir, 0755)
@@ -190,6 +205,9 @@ foreach ($drive in $drives) {
 	}
 }
 
+// getAvailableDrives 检测当前系统可用的盘符。
+// 从 C 开始（跳过 A/B，这对传统软驱盘符在现代系统上几乎不会出现），
+// 通过 os.Stat 检查根目录是否存在来判断。
 func getAvailableDrives() []string {
 	var drives []string
 	for _, letter := range "CDEFGHIJKLMNOPQRSTUVWXYZ" {
@@ -201,6 +219,8 @@ func getAvailableDrives() []string {
 	return drives
 }
 
+// copyLnkFiles 复制 srcDir 下的 .lnk 文件到 dstDir。
+// 只复制文件（跳过子目录），用 getUniquePath 处理同名冲突。
 func copyLnkFiles(srcDir, dstDir string) {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {

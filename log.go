@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// ANSI escape code 用于终端彩色输出。
+// Windows 下需 Windows Terminal / ConEmu 等支持 ANSI 的终端模拟器。
 const (
 	reset  = "\033[0m"
 	bold   = "\033[1m"
