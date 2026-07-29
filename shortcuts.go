@@ -3,6 +3,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -219,31 +220,37 @@ func getAvailableDrives() []string {
 	return drives
 }
 
-// copyLnkFiles 复制 srcDir 下的 .lnk 文件到 dstDir。
-// 只复制文件（跳过子目录），用 getUniquePath 处理同名冲突。
+// copyLnkFiles 递归遍历 srcDir，将 .lnk 文件按原目录结构复制到 dstDir。
+// 用 getUniquePath 处理同名冲突。
 func copyLnkFiles(srcDir, dstDir string) {
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".lnk") {
-			continue
+	filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(d.Name()), ".lnk") {
+			return nil
 		}
 
-		src := filepath.Join(srcDir, entry.Name())
-		dst := filepath.Join(dstDir, entry.Name())
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return nil
+		}
+		dst := filepath.Join(dstDir, relPath)
+		os.MkdirAll(filepath.Dir(dst), 0755)
 		dst = getUniquePath(dst)
 
-		data, err := os.ReadFile(src)
+		data, err := os.ReadFile(path)
 		if err != nil {
-			continue
+			return nil
 		}
 		if err := os.WriteFile(dst, data, 0644); err != nil {
 			logWarn("复制快捷方式失败: %v", err)
 		}
-	}
+		return nil
+	})
 }
 
 func getShortcutSrcDirs() []string {
