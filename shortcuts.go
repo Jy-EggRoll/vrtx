@@ -19,15 +19,65 @@ func powershell(script string) *exec.Cmd {
 	return cmd
 }
 
-// extractShortcuts 并发启动 5 个提取任务：
-//   开始菜单 → StartMenu/    Windows Apps → WindowsApps/
-//   最近文件  → Recent/       系统位置   → System/
-//   磁盘根目录 → Drives/
+// extractShortcuts 按开关并发启动已启用的提取任务：
+//
+//	software → StartMenu/ + WindowsApps/
+//	recent   → Recent/    office → Office/
+//	system   → System/    drives → Drives/
+//
 // 各任务独立并行，全部完成后返回
-func extractShortcuts(outputDir string) {
+func extractShortcuts(outputDir string, software, system, drives, recent, office bool) {
 	shortcutDir := filepath.Join(outputDir, "Shortcuts")
 	os.MkdirAll(shortcutDir, 0755)
 
+	var wg sync.WaitGroup
+
+	if software {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			extractSoftwareShortcuts(shortcutDir)
+		}()
+	}
+
+	if recent {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			extractRecentShortcuts(shortcutDir)
+		}()
+	}
+
+	if office {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			extractOfficeShortcuts(shortcutDir)
+		}()
+	}
+
+	if system {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			extractSystemShortcuts(shortcutDir)
+		}()
+	}
+
+	if drives {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			extractDriveShortcuts(shortcutDir)
+		}()
+	}
+
+	wg.Wait()
+}
+
+// extractSoftwareShortcuts 并发执行软件相关的两个提取任务：
+// 开始菜单的 .lnk 快捷方式和 Windows Apps 的 COM 枚举。
+func extractSoftwareShortcuts(shortcutDir string) {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -40,24 +90,6 @@ func extractShortcuts(outputDir string) {
 	go func() {
 		defer wg.Done()
 		extractWindowsAppsShortcuts(shortcutDir)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		extractRecentShortcuts(shortcutDir)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		extractSystemShortcuts(shortcutDir)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		extractDriveShortcuts(shortcutDir)
 	}()
 
 	wg.Wait()
@@ -116,19 +148,24 @@ foreach ($item in $folder.Items()) {
 	}
 }
 
+// extractRecentShortcuts 复制 Windows 最近文件夹中的 .lnk 快捷方式。
 func extractRecentShortcuts(shortcutDir string) {
 	homeDir, _ := os.UserHomeDir()
-	dirs := []string{
-		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"),
-		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"),
-	}
 
 	targetDir := filepath.Join(shortcutDir, "Recent")
 	os.MkdirAll(targetDir, 0755)
 
-	for _, dir := range dirs {
-		copyLnkFiles(dir, targetDir)
-	}
+	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"), targetDir)
+}
+
+// extractOfficeShortcuts 复制 Office 最近文件夹中的 .lnk 快捷方式。
+func extractOfficeShortcuts(shortcutDir string) {
+	homeDir, _ := os.UserHomeDir()
+
+	targetDir := filepath.Join(shortcutDir, "Office")
+	os.MkdirAll(targetDir, 0755)
+
+	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"), targetDir)
 }
 
 func extractSystemShortcuts(shortcutDir string) {
@@ -253,17 +290,28 @@ func copyLnkFiles(srcDir, dstDir string) {
 	})
 }
 
-func getShortcutSrcDirs() []string {
+// getShortcutSrcDirs 返回需要监控变更的快捷方式源目录。
+// 按开关拼接：software → 开始菜单两处 Programs；recent → Windows Recent；office → Office Recent。
+// system 和 drives 无文件系统源，不在此列表（drives 依赖盘符变化检测）。
+func getShortcutSrcDirs(software, recent, office bool) []string {
 	homeDir, _ := os.UserHomeDir()
 	programData := os.Getenv("ProgramData")
 
-	dirs := []string{
-		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"),
-		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"),
-		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"),
+	var dirs []string
+
+	if software {
+		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"))
+		if programData != "" {
+			dirs = append(dirs, filepath.Join(programData, "Microsoft", "Windows", "Start Menu", "Programs"))
+		}
 	}
-	if programData != "" {
-		dirs = append(dirs, filepath.Join(programData, "Microsoft", "Windows", "Start Menu", "Programs"))
+
+	if recent {
+		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"))
+	}
+
+	if office {
+		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"))
 	}
 
 	return dirs

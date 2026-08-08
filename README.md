@@ -36,14 +36,18 @@ vrtx [选项]
 
 ### 选项
 
-| 选项         | 默认值                | 说明                               |
-| ------------ | --------------------- | ---------------------------------- |
-| `-watch`     | `true`                | 启用监控模式，检测到变更时自动重建 |
-| `-interval`  | `1s`                  | 监控轮询间隔                       |
-| `-bookmarks` | `true`                | 提取浏览器书签                     |
-| `-shortcuts` | `true`                | 提取 Windows 快捷方式              |
-| `-out`       | `%TEMP%\VRTX`         | 输出目录                           |
-| `-clean`     | `false`               | 清除所有输出文件后退出             |
+| 选项          | 默认值  | 说明                                     |
+| ------------- | ------- | ---------------------------------------- |
+| `-watch`      | `true`  | 启用监控模式，检测到变更时自动重建       |
+| `-interval`   | `1s`    | 监控轮询间隔                             |
+| `-bookmarks`  | `true`  | 提取浏览器书签（Chrome / Edge）          |
+| `-software`   | `true`  | 提取软件快捷方式（开始菜单 / Windows Apps）|
+| `-system`     | `true`  | 提取系统位置快捷方式                     |
+| `-drives`     | `true`  | 提取磁盘根目录快捷方式                   |
+| `-recent`     | `false` | 提取 Windows 最近文件快捷方式            |
+| `-office`     | `false` | 提取 Office 最近文件快捷方式             |
+| `-out`        | `%TEMP%\VRTX` | 输出目录                            |
+| `-clean`      | `false` | 清除所有输出文件后退出                   |
 
 ### 示例
 
@@ -52,13 +56,16 @@ vrtx [选项]
 vrtx
 
 # 仅提取书签
-vrtx -shortcuts=false
+vrtx -software=false
 
 # 仅提取书签，不监控
-vrtx -watch=false -shortcuts=false
+vrtx -watch=false -software=false
 
 # 仅提取快捷方式，不监控
 vrtx -watch=false -bookmarks=false
+
+# 额外提取最近文件
+vrtx -recent
 
 # 自定义输出目录
 vrtx -out D:\MyShortcuts
@@ -84,15 +91,17 @@ vrtx -clean
 │   │   └── ...
 │   ├── Recent\                 # 最近文件
 │   │   └── ...
-    │   ├── System\                 # 系统位置
-    │   │   ├── 回收站.lnk
-    │   │   ├── 此电脑.lnk
-    │   │   ├── 用户目录.lnk
-    │   │   └── 开机启动.lnk
-    │   └── Drives\                 # 磁盘根目录
-    │       ├── C盘.lnk
-    │       ├── D盘.lnk
-    │       └── ...
+│   ├── Office\                 # Office 最近文件
+│   │   └── ...
+│   ├── System\                 # 系统位置
+│   │   ├── 回收站.lnk
+│   │   ├── 此电脑.lnk
+│   │   ├── 用户目录.lnk
+│   │   └── 开机启动.lnk
+│   └── Drives\                 # 磁盘根目录
+│       ├── C盘.lnk
+│       ├── D盘.lnk
+│       └── ...
 ```
 
 ## 构建

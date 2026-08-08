@@ -8,8 +8,8 @@ import (
 
 // startWatch 以轮询方式监控文件变更，直到收到退出信号。
 // 监控架构：time.Ticker 周期性触发 → 对比文件 ModTime 判断是否变化 → 增量重建。
-// 书签和快捷方式的检测相互独立，各自判断各自重建。
-func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal, watchBookmarks, watchShortcuts bool) {
+// 书签和各快捷方式来源的检测相互独立，各自判断各自重建。
+func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -26,13 +26,15 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 
 	var shortcutModTimes map[string]time.Time
 	var lastDrives []string
-	if watchShortcuts {
+	if watchSoftware || watchRecent || watchOffice {
 		shortcutModTimes = make(map[string]time.Time)
-		for _, dir := range getShortcutSrcDirs() {
+		for _, dir := range getShortcutSrcDirs(watchSoftware, watchRecent, watchOffice) {
 			if fi, err := os.Stat(dir); err == nil {
 				shortcutModTimes[dir] = fi.ModTime()
 			}
 		}
+	}
+	if watchDrives {
 		lastDrives = getAvailableDrives()
 	}
 
@@ -64,30 +66,34 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 			}
 
 			// 快捷方式变更检测：比较源目录的 mtime 以及可用盘符变化
-			if watchShortcuts {
+			if watchSoftware || watchRecent || watchOffice || watchDrives {
 				changed := false
-				for _, dir := range getShortcutSrcDirs() {
-					fi, err := os.Stat(dir)
-					if err != nil {
-						continue
-					}
-					prev, ok := shortcutModTimes[dir]
-					if !ok || fi.ModTime().After(prev) {
-						shortcutModTimes[dir] = fi.ModTime()
-						changed = true
+				if watchSoftware || watchRecent || watchOffice {
+					for _, dir := range getShortcutSrcDirs(watchSoftware, watchRecent, watchOffice) {
+						fi, err := os.Stat(dir)
+						if err != nil {
+							continue
+						}
+						prev, ok := shortcutModTimes[dir]
+						if !ok || fi.ModTime().After(prev) {
+							shortcutModTimes[dir] = fi.ModTime()
+							changed = true
+						}
 					}
 				}
 
-				drives := getAvailableDrives()
-				if !driveListsEqual(drives, lastDrives) {
-					lastDrives = drives
-					changed = true
+				if watchDrives {
+					drives := getAvailableDrives()
+					if !driveListsEqual(drives, lastDrives) {
+						lastDrives = drives
+						changed = true
+					}
 				}
 
 				if changed {
 					logInfo("检测到快捷方式变更，正在重建...")
 					os.RemoveAll(filepath.Join(outputDir, "Shortcuts"))
-					extractShortcuts(outputDir)
+					extractShortcuts(outputDir, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice)
 					logInfo("快捷方式重建完成！")
 				}
 			}
