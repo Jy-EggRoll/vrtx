@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // powershell 封装 PowerShell 调用，固定 -NoProfile -NonInteractive -ExecutionPolicy Bypass 参数
@@ -17,6 +16,18 @@ func powershell(script string) *exec.Cmd {
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script)
 	hideWindow(cmd)
 	return cmd
+}
+
+// runPowershell 执行一段 PowerShell 脚本（可附带额外环境变量），失败时记录警告。
+// 统一了各快捷方式提取函数里重复的 CombinedOutput + logWarn 样板。
+func runPowershell(script string, env ...string) {
+	cmd := powershell(script)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		logWarn("PowerShell 执行失败: %v\n%s", err, out)
+	}
 }
 
 // extractShortcuts 按开关并发启动已启用的提取任务：
@@ -30,86 +41,44 @@ func extractShortcuts(outputDir string, software, system, drives, recent, office
 	shortcutDir := filepath.Join(outputDir, "Shortcuts")
 	os.MkdirAll(shortcutDir, 0755)
 
-	var wg sync.WaitGroup
-
+	var tasks []func()
 	if software {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			extractSoftwareShortcuts(shortcutDir)
-		}()
+		tasks = append(tasks,
+			func() { extractStartMenuShortcuts(shortcutDir) },
+			func() { extractWindowsAppsShortcuts(shortcutDir) },
+		)
 	}
-
 	if recent {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			extractRecentShortcuts(shortcutDir)
-		}()
+		tasks = append(tasks, func() { extractRecentShortcuts(shortcutDir) })
 	}
-
 	if office {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			extractOfficeShortcuts(shortcutDir)
-		}()
+		tasks = append(tasks, func() { extractOfficeShortcuts(shortcutDir) })
 	}
-
 	if system {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			extractSystemShortcuts(shortcutDir)
-		}()
+		tasks = append(tasks, func() { extractSystemShortcuts(shortcutDir) })
 	}
-
 	if drives {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			extractDriveShortcuts(shortcutDir)
-		}()
+		tasks = append(tasks, func() { extractDriveShortcuts(shortcutDir) })
 	}
-
-	wg.Wait()
+	runConcurrent(tasks...)
 }
 
-// extractSoftwareShortcuts 并发执行软件相关的两个提取任务：
-// 开始菜单的 .lnk 快捷方式和 Windows Apps 的 COM 枚举。
-func extractSoftwareShortcuts(shortcutDir string) {
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		extractStartMenuShortcuts(shortcutDir)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		extractWindowsAppsShortcuts(shortcutDir)
-	}()
-
-	wg.Wait()
-}
-
-func extractStartMenuShortcuts(shortcutDir string) {
+// startMenuDirs 返回开始菜单 Programs 目录（用户态 + 机器态），多处复用
+func startMenuDirs() []string {
 	homeDir, _ := os.UserHomeDir()
-	programData := os.Getenv("ProgramData")
-
 	dirs := []string{
 		filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"),
 	}
-	if programData != "" {
+	if programData := os.Getenv("ProgramData"); programData != "" {
 		dirs = append(dirs, filepath.Join(programData, "Microsoft", "Windows", "Start Menu", "Programs"))
 	}
+	return dirs
+}
 
+func extractStartMenuShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "StartMenu")
 	os.MkdirAll(targetDir, 0755)
-
-	for _, dir := range dirs {
+	for _, dir := range startMenuDirs() {
 		copyLnkFiles(dir, targetDir)
 	}
 }
@@ -122,7 +91,7 @@ func extractWindowsAppsShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
 
-	cmd := powershell(`
+	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_APPS_DIR")
 $shell = New-Object -ComObject Shell.Application
 $folder = $shell.NameSpace("shell:AppsFolder")
@@ -139,32 +108,23 @@ foreach ($item in $folder.Items()) {
         } catch { }
     }
 }
-`)
-	cmd.Env = append(os.Environ(), "VRTX_APPS_DIR="+targetDir)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		logWarn("提取 Windows Apps 失败: %v\n%s", err, out)
-	}
+`
+	runPowershell(script, "VRTX_APPS_DIR="+targetDir)
 }
 
 // extractRecentShortcuts 复制 Windows 最近文件夹中的 .lnk 快捷方式。
 func extractRecentShortcuts(shortcutDir string) {
 	homeDir, _ := os.UserHomeDir()
-
 	targetDir := filepath.Join(shortcutDir, "Recent")
 	os.MkdirAll(targetDir, 0755)
-
 	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"), targetDir)
 }
 
 // extractOfficeShortcuts 复制 Office 最近文件夹中的 .lnk 快捷方式。
 func extractOfficeShortcuts(shortcutDir string) {
 	homeDir, _ := os.UserHomeDir()
-
 	targetDir := filepath.Join(shortcutDir, "Office")
 	os.MkdirAll(targetDir, 0755)
-
 	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"), targetDir)
 }
 
@@ -172,7 +132,7 @@ func extractSystemShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "System")
 	os.MkdirAll(targetDir, 0755)
 
-	cmd := powershell(`
+	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_SYS_DIR")
 $wshell = New-Object -ComObject WScript.Shell
 
@@ -194,13 +154,8 @@ foreach ($item in $items) {
         } catch { }
     }
 }
-`)
-	cmd.Env = append(os.Environ(), "VRTX_SYS_DIR="+targetDir)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		logWarn("提取系统快捷方式失败: %v\n%s", err, out)
-	}
+`
+	runPowershell(script, "VRTX_SYS_DIR="+targetDir)
 }
 
 // extractDriveShortcuts 为每个可用盘符创建 .lnk 快捷方式。
@@ -214,9 +169,7 @@ func extractDriveShortcuts(shortcutDir string) {
 		return
 	}
 
-	driveList := strings.Join(drives, ",")
-
-	cmd := powershell(`
+	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell
@@ -231,16 +184,11 @@ foreach ($drive in $drives) {
         } catch { }
     }
 }
-`)
-	cmd.Env = append(os.Environ(),
+`
+	runPowershell(script,
 		"VRTX_DRIVES_DIR="+targetDir,
-		"VRTX_DRIVE_LIST="+driveList,
+		"VRTX_DRIVE_LIST="+strings.Join(drives, ","),
 	)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		logWarn("提取驱动器快捷方式失败: %v\n%s", err, out)
-	}
 }
 
 // getAvailableDrives 检测当前系统可用的盘符。
@@ -294,25 +242,16 @@ func copyLnkFiles(srcDir, dstDir string) {
 // 按开关拼接：software → 开始菜单两处 Programs；recent → Windows Recent；office → Office Recent。
 // system 和 drives 无文件系统源，不在此列表（drives 依赖盘符变化检测）。
 func getShortcutSrcDirs(software, recent, office bool) []string {
-	homeDir, _ := os.UserHomeDir()
-	programData := os.Getenv("ProgramData")
-
 	var dirs []string
-
 	if software {
-		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"))
-		if programData != "" {
-			dirs = append(dirs, filepath.Join(programData, "Microsoft", "Windows", "Start Menu", "Programs"))
-		}
+		dirs = append(dirs, startMenuDirs()...)
 	}
-
+	homeDir, _ := os.UserHomeDir()
 	if recent {
 		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"))
 	}
-
 	if office {
 		dirs = append(dirs, filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"))
 	}
-
 	return dirs
 }

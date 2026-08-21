@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // BookmarkNode 对应 Chrome/Edge 书签 JSON 中的递归节点结构。
@@ -46,18 +45,15 @@ func extractBookmarks(outputDir string) {
 	bookmarkDir := filepath.Join(outputDir, "Bookmarks")
 	os.MkdirAll(bookmarkDir, 0755)
 
-	var wg sync.WaitGroup
+	var tasks []func()
 	for _, path := range getBookmarkPaths() {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			continue
 		}
-		wg.Add(1)
-		go func(p string) {
-			defer wg.Done()
-			processBookmarkFile(p, bookmarkDir)
-		}(path)
+		p := path
+		tasks = append(tasks, func() { processBookmarkFile(p, bookmarkDir) })
 	}
-	wg.Wait()
+	runConcurrent(tasks...)
 }
 
 func processBookmarkFile(path, bookmarkDir string) {
@@ -78,15 +74,12 @@ func processBookmarkFile(path, bookmarkDir string) {
 		collectBookmarkInfo(&node, "", &bookmarks)
 	}
 
-	var wg sync.WaitGroup
+	var tasks []func()
 	for _, bm := range bookmarks {
-		wg.Add(1)
-		go func(b BookmarkInfo) {
-			defer wg.Done()
-			createURLFile(bookmarkDir, b)
-		}(bm)
+		b := bm
+		tasks = append(tasks, func() { createURLFile(bookmarkDir, b) })
 	}
-	wg.Wait()
+	runConcurrent(tasks...)
 }
 
 // collectBookmarkInfo 递归遍历 Chrome/Edge 书签 JSON 树。

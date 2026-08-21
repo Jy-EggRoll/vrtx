@@ -84,7 +84,8 @@ func runTray(ctx context.Context, cancel context.CancelFunc, outputDir string, i
 		// 退出时停止监控并关闭网页控制台服务
 		cancel()
 		if logServer != nil {
-			_ = logServer.Shutdown(context.Background())
+			// 立即关闭所有连接（含 SSE 长连接），不等待浏览器断开，否则 Shutdown 会阻塞到网页关闭才返回
+			_ = logServer.Close()
 		}
 	})
 }
