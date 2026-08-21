@@ -2,8 +2,10 @@ name: Package Development Release
 
 on:
     push:
+        branches:
+            - "**" # 任意分支的普通提交都构建开发版工件，方便测试下载
         tags:
-            - "[0-9]+.[0-9]+.[0-9]+.dev.[0-9]+" # 匹配 x.y.z.dev.n 格式的开发版本标签
+            - "[0-9]+.[0-9]+.[0-9]+.dev.[0-9]+" # 匹配 x.y.z.dev.n 格式的开发版本标签（额外创建预发布）
     workflow_dispatch: # 支持手动运行
 
 permissions:
@@ -37,14 +39,16 @@ jobs:
             - name: Get version info
               id: get_version
               run: |
-                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-                    # 手动运行时，使用当前日期作为版本标识
-                    VERSION="dev-$(date +%Y%m%d-%H%M%S)"
-                    echo "Manual run - using timestamp version: $VERSION"
-                  else
-                    # Tag 触发时，从 tag 获取版本
+                  if [ "${{ github.ref_type }}" = "tag" ]; then
+                    # 开发版标签触发时，直接使用 tag 作为版本号
                     VERSION=${GITHUB_REF#refs/tags/}
                     echo "Tag triggered - using tag version: $VERSION"
+                  else
+                    # 普通分支提交：以最近的正式版本号为基底，叠加分支名与日期构成开发版号
+                    BASE=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+                    SAFE_BRANCH="${GITHUB_REF_NAME//\//-}"
+                    VERSION="${BASE}.dev.${SAFE_BRANCH}$(date +%Y%m%d)"
+                    echo "Branch push - using dev version: $VERSION"
                   fi
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -64,9 +68,9 @@ jobs:
                   VERSION: ${{ steps.get_version.outputs.version }}
                   BUILDTIME: ${{ steps.get_build_time.outputs.buildtime }}
 
-            # 仅 tag 触发的开发版生成发布说明并创建预发布；手动运行只上传产物
+            # 仅 dev 标签触发的开发版生成发布说明并创建预发布；普通分支提交只上传产物
             - name: Generate release notes
-              if: github.event_name != 'workflow_dispatch'
+              if: github.ref_type == 'tag'
               id: notes
               run: |
                   CUR="${{ steps.get_version.outputs.version }}"
@@ -97,7 +101,7 @@ jobs:
                   } > release_notes.md
 
             - name: Create development release (for tag runs only)
-              if: github.event_name != 'workflow_dispatch'
+              if: github.ref_type == 'tag'
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.get_version.outputs.version }}
