@@ -35,16 +35,20 @@ type logEntry struct {
 	Msg   string
 }
 
-// logRing 是线程安全、有界的内存日志环形缓冲；超出容量时丢弃最旧条目，避免溢出
+// logRing 是线程安全、有界的内存日志环形缓冲；超出容量时丢弃最旧条目，避免溢出。
+// 同时维护一组订阅者通道，新日志会实时广播给订阅者（供网页控制台 SSE 使用）。
 type logRing struct {
-	mu  sync.Mutex
-	buf []logEntry
-	cap int
+	mu   sync.Mutex
+	buf  []logEntry
+	cap  int
+	subs map[chan logEntry]struct{}
 }
 
-func newLogRing(cap int) *logRing { return &logRing{cap: cap} }
+func newLogRing(cap int) *logRing {
+	return &logRing{cap: cap, subs: make(map[chan logEntry]struct{})}
+}
 
-// append 写入一条日志，超出容量时从队首丢弃最旧条目
+// append 写入一条日志，超出容量时从队首丢弃最旧条目，并向所有订阅者广播
 func (r *logRing) append(e logEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -52,15 +56,36 @@ func (r *logRing) append(e logEntry) {
 	if len(r.buf) > r.cap {
 		r.buf = r.buf[len(r.buf)-r.cap:]
 	}
+	for ch := range r.subs {
+		// 订阅者若来不及消费则丢弃该条，避免阻塞主流程
+		select {
+		case ch <- e:
+		default:
+		}
+	}
 }
 
-// snapshot 返回当前缓冲的副本，供网页控制台渲染
+// snapshot 返回当前缓冲的副本，供网页控制台首屏渲染
 func (r *logRing) snapshot() []logEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]logEntry, len(r.buf))
 	copy(out, r.buf)
 	return out
+}
+
+// subscribe 注册一个日志订阅者，返回接收通道与退订函数
+func (r *logRing) subscribe() (chan logEntry, func()) {
+	ch := make(chan logEntry, 256)
+	r.mu.Lock()
+	r.subs[ch] = struct{}{}
+	r.mu.Unlock()
+	unsub := func() {
+		r.mu.Lock()
+		delete(r.subs, ch)
+		r.mu.Unlock()
+	}
+	return ch, unsub
 }
 
 // ring 是全局日志缓冲，网页控制台读取它；容量 4096 条，满了就砍最旧，不会溢出

@@ -1,5 +1,6 @@
 {
   "IconPath": "assets/icon.ico",
+  "ManifestPath": "vrtx.manifest",
   "FixedFileInfo": {
     "FileVersion": {
       "Major": 1,

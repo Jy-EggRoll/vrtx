@@ -14,7 +14,7 @@ import (
 // powershell 封装 PowerShell 调用，固定 -NoProfile -NonInteractive -ExecutionPolicy Bypass 参数
 // 以避免用户配置文件干扰、交互弹框和执行策略限制
 func powershell(script string) *exec.Cmd {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script)
 	hideWindow(cmd)
 	return cmd
 }
@@ -122,7 +122,7 @@ func extractWindowsAppsShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
 
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", `
+	cmd := powershell(`
 $dir = [Environment]::GetEnvironmentVariable("VRTX_APPS_DIR")
 $shell = New-Object -ComObject Shell.Application
 $folder = $shell.NameSpace("shell:AppsFolder")
@@ -172,7 +172,7 @@ func extractSystemShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "System")
 	os.MkdirAll(targetDir, 0755)
 
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", `
+	cmd := powershell(`
 $dir = [Environment]::GetEnvironmentVariable("VRTX_SYS_DIR")
 $wshell = New-Object -ComObject WScript.Shell
 
@@ -216,7 +216,7 @@ func extractDriveShortcuts(shortcutDir string) {
 
 	driveList := strings.Join(drives, ",")
 
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", `
+	cmd := powershell(`
 $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell

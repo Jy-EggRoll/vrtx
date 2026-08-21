@@ -81,6 +81,9 @@ func main() {
 
 	logInfo("Vortex 输出目录: %s", outputDir)
 
+	// 先声明 DPI 感知，再进入托盘模式（创建托盘菜单前），避免菜单文字模糊
+	setDPIAware()
+
 	// 进入系统托盘模式：后台执行提取与监控，直到用户从托盘菜单退出
 	runTray(ctx, cancel, outputDir, *interval, *watch, *bookmarks, *software, *system, *drives, *recent, *office)
 }

@@ -14,6 +14,21 @@ import (
 //go:embed assets/icon.ico
 var iconData []byte
 
+// setDPIAware 让进程声明 DPI 感知，避免系统拉伸托盘菜单导致文字模糊。
+// 必须在创建任何窗口（含托盘菜单）之前调用；优先使用 Per-Monitor V2，
+// 旧系统回退到 SetProcessDPIAware（系统级 DPI 感知）。
+func setDPIAware() {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	if p := user32.NewProc("SetProcessDpiAwarenessContext"); p.Find() == nil {
+		// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (HANDLE)-4；64 位下即 0xFFFF…FC（用 ^uintptr(3) 表示，避免负常量大转 uintptr 溢出）
+		p.Call(^uintptr(3))
+		return
+	}
+	if p := user32.NewProc("SetProcessDPIAware"); p.Find() == nil {
+		p.Call()
+	}
+}
+
 // singleInstanceName 是跨实例互斥体名称，避免双击 exe 多次产生多个托盘图标
 const singleInstanceName = `Global\VRTX-SingleInstance`
 
