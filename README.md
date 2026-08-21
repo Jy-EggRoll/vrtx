@@ -14,15 +14,15 @@ vrtx（Vortex / 涡流）是一个 Windows 工具，用于聚合浏览器书签�
 
 从以下路径提取 `.lnk` 快捷方式：
 
-| 来源         | 路径                                                  |
-| ------------ | ----------------------------------------------------- |
-| 开始菜单     | `%APPDATA%\Microsoft\Windows\Start Menu\Programs`     |
-| 公共开始菜单 | `%ProgramData%\Microsoft\Windows\Start Menu\Programs` |
-| Windows Apps | 通过 COM 枚举 `shell:AppsFolder`                      |
-| 最近文件     | `%APPDATA%\Microsoft\Windows\Recent`                  |
-| Office 最近  | `%APPDATA%\Microsoft\Office\Recent`                   |
-| 系统位置     | 回收站 / 此电脑 / 用户目录 / 开机启动（通过 `shell:`）|
-| 磁盘根目录   | 所有可用盘符 C:\ D:\ ...（U 盘即插即识别）          |
+| 来源         | 路径                                                   |
+| ------------ | ------------------------------------------------------ |
+| 开始菜单     | `%APPDATA%\Microsoft\Windows\Start Menu\Programs`      |
+| 公共开始菜单 | `%ProgramData%\Microsoft\Windows\Start Menu\Programs`  |
+| Windows Apps | 通过 COM 枚举 `shell:AppsFolder`                       |
+| 最近文件     | `%APPDATA%\Microsoft\Windows\Recent`                   |
+| Office 最近  | `%APPDATA%\Microsoft\Office\Recent`                    |
+| 系统位置     | 回收站 / 此电脑 / 用户目录 / 开机启动（通过 `shell:`） |
+| 磁盘根目录   | 所有可用盘符 C:\ D:\ ...（U 盘即插即识别）             |
 
 ### 文件监控
 
@@ -36,18 +36,18 @@ vrtx [选项]
 
 ### 选项
 
-| 选项          | 默认值  | 说明                                     |
-| ------------- | ------- | ---------------------------------------- |
-| `-watch`      | `true`  | 启用监控模式，检测到变更时自动重建       |
-| `-interval`   | `1s`    | 监控轮询间隔                             |
-| `-bookmarks`  | `true`  | 提取浏览器书签（Chrome / Edge）          |
-| `-software`   | `true`  | 提取软件快捷方式（开始菜单 / Windows Apps）|
-| `-system`     | `true`  | 提取系统位置快捷方式                     |
-| `-drives`     | `true`  | 提取磁盘根目录快捷方式                   |
-| `-recent`     | `false` | 提取 Windows 最近文件快捷方式            |
-| `-office`     | `false` | 提取 Office 最近文件快捷方式             |
-| `-out`        | `%TEMP%\VRTX` | 输出目录                            |
-| `-clean`      | `false` | 清除所有输出文件后退出                   |
+| 选项         | 默认值        | 说明                                        |
+| ------------ | ------------- | ------------------------------------------- |
+| `-watch`     | `true`        | 启用监控模式，检测到变更时自动重建          |
+| `-interval`  | `1s`          | 监控轮询间隔                                |
+| `-bookmarks` | `true`        | 提取浏览器书签（Chrome / Edge）             |
+| `-software`  | `true`        | 提取软件快捷方式（开始菜单 / Windows Apps） |
+| `-system`    | `true`        | 提取系统位置快捷方式                        |
+| `-drives`    | `true`        | 提取磁盘根目录快捷方式                      |
+| `-recent`    | `false`       | 提取 Windows 最近文件快捷方式               |
+| `-office`    | `false`       | 提取 Office 最近文件快捷方式                |
+| `-out`       | `%TEMP%\VRTX` | 输出目录                                    |
+| `-clean`     | `false`       | 清除所有输出文件后退出                      |
 
 ### 示例
 

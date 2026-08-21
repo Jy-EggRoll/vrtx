@@ -1,0 +1,106 @@
+# 该工作流只能通过正式版本的标签自动触发
+
+name: Publish Release
+
+on:
+    push:
+        tags:
+            - "[0-9]+.[0-9]+.[0-9]+" # 匹配 x.y.z 格式的正式版本标签
+
+permissions:
+    contents: write
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  # 始终以 go.mod 为 Go 版本的唯一来源，避免工作流与项目配置漂移
+                  go-version-file: go.mod
+
+            - name: Setup Task
+              uses: go-task/setup-task@v2
+              with:
+                  version: 3.x
+
+            # goversioninfo 用于生成 Windows PE 资源（图标 + 版本号），本地由 mise 提供，CI 需显式安装
+            - name: Install goversioninfo
+              run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+            - name: Get tag version
+              id: get_version
+              run: |
+                  VERSION=${GITHUB_REF#refs/tags/}
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Publishing version: $VERSION"
+
+            - name: Get build time
+              id: get_build_time
+              run: |
+                  BUILDTIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                  echo "buildtime=$BUILDTIME" >> $GITHUB_OUTPUT
+
+            # 发布构建必须先通过完整验证，失败时不会生成或上传产物
+            - name: Verify source
+              run: task verify
+
+            - name: Build binaries for all platforms
+              run: task build-all
+              env:
+                  VERSION: ${{ steps.get_version.outputs.version }}
+                  BUILDTIME: ${{ steps.get_build_time.outputs.buildtime }}
+
+            - name: Generate release notes
+              id: notes
+              run: |
+                  CUR="${{ steps.get_version.outputs.version }}"
+                  PREV=$(git tag -l --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^$CUR$" | head -n1)
+                  {
+                    echo "# VRTX v$CUR"
+                    echo ""
+                    echo "- **Version**: $CUR"
+                    echo "- **Commit**: ${{ github.sha }}"
+                    echo ""
+                    if [ -n "$PREV" ]; then
+                      echo "[Compare with $PREV](https://github.com/${{ github.repository }}/compare/$PREV...$CUR)"
+                    else
+                      echo "首次发布"
+                    fi
+                    echo ""
+                    echo "---"
+                    echo ""
+                    echo "## 下载"
+                    echo ""
+                    echo "| 架构 | 下载 |"
+                    echo "|------|------|"
+                    echo "| Windows x64 | [vrtx-windows-amd64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-amd64.exe) |"
+                    echo "| Windows ARM64 | [vrtx-windows-arm64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-arm64.exe) |"
+                  } > release_notes.md
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.get_version.outputs.version }}
+                  name: "VRTX v${{ steps.get_version.outputs.version }}"
+                  body_path: release_notes.md
+                  files: |
+                      build/*
+                  draft: false
+                  prerelease: false
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binaries-${{ steps.get_version.outputs.version }}
+                  path: build/*
+                  retention-days: 90

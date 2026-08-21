@@ -1,44 +1,106 @@
 version: "3"
 
 vars:
+  APP: vrtx
+  # 版本号由 CI 通过环境变量传入（取自 git tag），本地开发构建保留 dev
   VERSION:
-    sh: echo "1.0.$(date -u +%Y%m%d).$(date -u +%H%M)"
+    sh: echo "${VERSION:-dev}"
+  # 构建时间由 CI 通过环境变量传入，本地开发构建保留 unknown
+  BUILDTIME:
+    sh: echo "${BUILDTIME:-unknown}"
+  # 将 semver（如 1.2.3.dev.4）清洗为数值版本 1.2.3.4，供 goversioninfo 写入 PE 资源；
+  # 非 semver（本地 dev）回退为 1.0.0.0，避免 goversioninfo 因非法版本号报错
+  FILEVERSION:
+    sh: |
+      v="{{.VERSION}}"
+      if echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.dev\.[0-9]+)?$'; then
+        echo "$v" | sed -E 's/^([0-9]+)\.([0-9]+)\.([0-9]+)(\.dev\.([0-9]+))?$/\1.\2.\3.\5/' | sed 's/\.$/.0/'
+      else
+        echo "1.0.0.0"
+      fi
+  LDFLAGS: '-s -w -X main.Version={{.VERSION}} -X main.BuildTime={{.BUILDTIME}}'
 
 tasks:
   default:
+    desc: 验证并构建全部 Windows 平台二进制（CI 默认任务）
+    # cmds 顺序执行，先验证再构建，保证失败时立即停止
     cmds:
-      - task: windows
+      - task: verify
+      - task: build-all
+
+  fmt:check:
+    desc: 检查 Go 源码格式
+    cmds:
+      - |
+        unformatted="$(gofmt -l $(git ls-files --cached --others --exclude-standard '*.go'))"
+        if [ -n "$unformatted" ]; then
+          printf '以下 Go 文件未通过 gofmt 检查：\n%s\n' "$unformatted" >&2
+          exit 1
+        fi
+
+  vet:
+    desc: 运行 go vet
+    # vrtx 仅面向 Windows（shortcuts.go 等带 windows 构建约束），需在 GOOS=windows 下编译才能通过
+    cmds:
+      - GOOS=windows go vet ./...
+
+  test:
+    desc: 运行全部 Go 测试（不使用缓存）
+    # 同样在 GOOS=windows 下编译；当前无测试文件，仅做编译期校验
+    cmds:
+      - GOOS=windows go test ./... -count=1
+
+  verify:
+    desc: 运行全部验证检查
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test
 
   generate:
-    desc: 生成 Windows 资源文件（图标 + 版本号）
+    desc: 生成 Windows 资源文件（图标 + 版本号，含 amd64/arm64）
+    # -platform-specific 会产出各架构的 resource_windows_*.syso，再删除无需的 386/arm
+    # 与默认 resource.syso，避免 go build 因「too many .rsrc sections」冲突
     cmds:
-      - goversioninfo -file-version={{.VERSION}} -product-version={{.VERSION}} versioninfo.json
-    sources:
-      - versioninfo.json
-      - assets/icon.ico
+      - goversioninfo -platform-specific -file-version={{.FILEVERSION}} -product-version={{.FILEVERSION}} -propagate-ver-strings versioninfo.json
+      - rm -f resource.syso resource_windows_386.syso resource_windows_arm.syso
     generates:
-      - resource.syso
+      - resource_windows_amd64.syso
+      - resource_windows_arm64.syso
 
-  windows:
-    desc: 构建 Windows amd64 版本
+  build:windows:amd64:
+    desc: 交叉编译 Windows amd64
     deps:
       - generate
     cmds:
-      - GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o vrtx.exe .
-    generates:
-      - vrtx.exe
+      - mkdir -p build
+      - CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o build/{{.APP}}-windows-amd64.exe .
 
-  linux:
-    desc: 构建 Linux amd64 版本
+  build:windows:arm64:
+    desc: 交叉编译 Windows arm64
+    deps:
+      - generate
     cmds:
-      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o vrtx .
+      - mkdir -p build
+      - CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="{{.LDFLAGS}}" -trimpath -o build/{{.APP}}-windows-arm64.exe .
+
+  build-all:
+    desc: 构建全部 Windows 平台二进制
+    deps:
+      - build:windows:amd64
+      - build:windows:arm64
+
+  windows:
+    desc: 本地构建 Windows amd64
+    deps:
+      - build:windows:amd64
 
   run:
-    desc: 直接运行
+    desc: 直接运行（仅限 Windows 环境，依赖 shortcuts.go 的 windows 构建约束）
     cmds:
       - go run .
 
   clean:
     desc: 清理构建产物
     cmds:
-      - rm -f vrtx vrtx.exe resource.syso
+      - rm -rf build/ vrtx vrtx.exe resource.syso resource_windows_*.syso

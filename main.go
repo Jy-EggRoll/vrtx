@@ -17,6 +17,13 @@ import (
 //  5. 如果 --watch=true，进入监控循环（轮询检测变更并增量重建）
 //  6. 如果 --watch=false，提取完成后直接退出
 func main() {
+	// 在解析其余参数前优先处理 --version / -v，打印版本与构建时间后直接退出，
+	// 版本号与构建时间由发布构建通过链接参数注入，详见 version.go
+	if hasVersionFlag() {
+		logInfo("VRTX v%s (build %s)", Version, BuildTime)
+		return
+	}
+
 	watch := flag.Bool("watch", true, "启用监控模式，检测到变更时自动重建")
 	interval := flag.Duration("interval", 1*time.Second, "监控轮询间隔")
 	outDir := flag.String("out", "", "输出目录（默认：系统临时目录下的 VRTX）")

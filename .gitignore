@@ -1,4 +1,4 @@
-vrtx
-vrtx.exe
-resource.syso
+*.exe
+*.syso
+build/
 .task/

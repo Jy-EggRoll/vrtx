@@ -1,0 +1,118 @@
+name: Package Development Release
+
+on:
+    push:
+        tags:
+            - "[0-9]+.[0-9]+.[0-9]+.dev.[0-9]+" # 匹配 x.y.z.dev.n 格式的开发版本标签
+    workflow_dispatch: # 支持手动运行
+
+permissions:
+    contents: write
+
+jobs:
+    package:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  # 始终以 go.mod 为 Go 版本的唯一来源，避免工作流与项目配置漂移
+                  go-version-file: go.mod
+
+            - name: Setup Task
+              uses: go-task/setup-task@v2
+              with:
+                  version: 3.x
+
+            # goversioninfo 用于生成 Windows PE 资源（图标 + 版本号），本地由 mise 提供，CI 需显式安装
+            - name: Install goversioninfo
+              run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+            - name: Get version info
+              id: get_version
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    # 手动运行时，使用当前日期作为版本标识
+                    VERSION="dev-$(date +%Y%m%d-%H%M%S)"
+                    echo "Manual run - using timestamp version: $VERSION"
+                  else
+                    # Tag 触发时，从 tag 获取版本
+                    VERSION=${GITHUB_REF#refs/tags/}
+                    echo "Tag triggered - using tag version: $VERSION"
+                  fi
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+            - name: Get build time
+              id: get_build_time
+              run: |
+                  BUILDTIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                  echo "buildtime=$BUILDTIME" >> $GITHUB_OUTPUT
+
+            # 发布构建必须先通过完整验证，失败时不会生成或上传产物
+            - name: Verify source
+              run: task verify
+
+            - name: Build binaries for all platforms
+              run: task build-all
+              env:
+                  VERSION: ${{ steps.get_version.outputs.version }}
+                  BUILDTIME: ${{ steps.get_build_time.outputs.buildtime }}
+
+            # 仅 tag 触发的开发版生成发布说明并创建预发布；手动运行只上传产物
+            - name: Generate release notes
+              if: github.event_name != 'workflow_dispatch'
+              id: notes
+              run: |
+                  CUR="${{ steps.get_version.outputs.version }}"
+                  PREV=$(git tag -l --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+                  {
+                    echo "# VRTX v$CUR (开发版)"
+                    echo ""
+                    echo "- **Version**: $CUR"
+                    echo "- **Build**: ${{ github.run_id }}"
+                    echo "- **Commit**: ${{ github.sha }}"
+                    echo ""
+                    echo "> 开发版本仅供测试，可能包含不稳定或实验性功能。"
+                    echo ""
+                    if [ -n "$PREV" ]; then
+                      echo "[Compare with $PREV](https://github.com/${{ github.repository }}/compare/$PREV...$CUR)"
+                    else
+                      echo "首次发布"
+                    fi
+                    echo ""
+                    echo "---"
+                    echo ""
+                    echo "## 下载"
+                    echo ""
+                    echo "| 架构 | 下载 |"
+                    echo "|------|------|"
+                    echo "| Windows x64 | [vrtx-windows-amd64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-amd64.exe) |"
+                    echo "| Windows ARM64 | [vrtx-windows-arm64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-arm64.exe) |"
+                  } > release_notes.md
+
+            - name: Create development release (for tag runs only)
+              if: github.event_name != 'workflow_dispatch'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.get_version.outputs.version }}
+                  name: "VRTX v${{ steps.get_version.outputs.version }} (开发版)"
+                  body_path: release_notes.md
+                  files: |
+                      build/*
+                  draft: false
+                  prerelease: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binaries-${{ steps.get_version.outputs.version }}
+                  path: build/*
+                  retention-days: 30
