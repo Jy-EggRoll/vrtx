@@ -29,6 +29,14 @@ jobs:
               with:
                   version: 3.x
 
+            # goversioninfo 用于生成 Windows PE 资源（图标 + 版本号），本地由 mise 提供，CI 需显式安装
+            - name: Install goversioninfo
+              run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+            # go install 的目标目录（GOPATH/bin）默认不在 PATH，需显式加入供后续 task 调用
+            - name: Add GOPATH bin to PATH
+              run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
             # 默认任务严格先执行 verify（在 GOOS=windows 下编译校验），再构建全部 Windows 架构
             - name: Verify and build all targets
               run: task
