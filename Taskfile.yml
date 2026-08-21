@@ -18,7 +18,7 @@ vars:
       else
         echo "1.0.0.0"
       fi
-  LDFLAGS: '-s -w -X main.Version={{.VERSION}} -X main.BuildTime={{.BUILDTIME}}'
+  LDFLAGS: '-s -w -H windowsgui -X main.Version={{.VERSION}} -X main.BuildTime={{.BUILDTIME}}'
 
 tasks:
   default:

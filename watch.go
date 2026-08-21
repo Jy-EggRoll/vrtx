@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-// startWatch 以轮询方式监控文件变更，直到收到退出信号。
+// startWatch 以轮询方式监控文件变更，直到 ctx 被取消。
 // 监控架构：time.Ticker 周期性触发 → 对比文件 ModTime 判断是否变化 → 增量重建。
 // 书签和各快捷方式来源的检测相互独立，各自判断各自重建。
-func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice bool) {
+func startWatch(ctx context.Context, outputDir string, interval time.Duration, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -98,7 +99,7 @@ func startWatch(outputDir string, interval time.Duration, sigCh <-chan os.Signal
 				}
 			}
 
-		case <-sigCh:
+		case <-ctx.Done():
 			logInfo("监控已停止，文件保留在 %s", outputDir)
 			return
 		}

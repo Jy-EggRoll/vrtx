@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"os/signal"
@@ -62,26 +63,26 @@ func main() {
 		logFatal("无法创建输出目录: %v", err)
 	}
 
-	logInfo("Vortex 输出目录: %s", outputDir)
-
-	if *bookmarks {
-		logInfo("正在提取书签...")
-		extractBookmarks(outputDir)
-	}
-	if *software || *system || *drives || *recent || *office {
-		logInfo("正在提取快捷方式...")
-		extractShortcuts(outputDir, *software, *system, *drives, *recent, *office)
-	}
-
-	if !*watch {
-		logInfo("提取完成！")
+	// 单实例守卫：避免双击 exe 多次产生多个托盘图标（仅 Windows 有效）
+	if !acquireSingleInstance() {
+		logError("VRTX 已在运行，请勿重复启动")
 		return
 	}
 
+	// 通过 context 协调后台监控生命周期，SIGINT/SIGTERM 同样触发退出
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
 
-	startWatch(outputDir, *interval, sigCh, *bookmarks, *software, *system, *drives, *recent, *office)
+	logInfo("Vortex 输出目录: %s", outputDir)
+
+	// 进入系统托盘模式：后台执行提取与监控，直到用户从托盘菜单退出
+	runTray(ctx, cancel, outputDir, *interval, *watch, *bookmarks, *software, *system, *drives, *recent, *office)
 }
 
 // getOutputDir 按 TEMP → TMP → AppData\Local\Temp 优先级 fallback 获取临时目录，
