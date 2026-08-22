@@ -2,3 +2,5 @@
 *.syso
 build/
 .task/
+
+!AutoHotkey64.exe
