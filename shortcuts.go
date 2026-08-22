@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -78,8 +79,45 @@ func startMenuDirs() []string {
 func extractStartMenuShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "StartMenu")
 	os.MkdirAll(targetDir, 0755)
+
+	total := 0
 	for _, dir := range startMenuDirs() {
-		copyLnkFiles(dir, targetDir)
+		total += copyLnkFiles(dir, targetDir)
+	}
+	logInfo("开始菜单：写入 %d 个快捷方式", total)
+}
+
+// listLnkNames 列出目录下现有 .lnk 文件名集合，用于 PowerShell 执行前后对比统计新建数量
+func listLnkNames(dir string) map[string]struct{} {
+	names := make(map[string]struct{})
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return names
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".lnk") {
+			names[e.Name()] = struct{}{}
+		}
+	}
+	return names
+}
+
+// reportNewLnks 对比执行前后的 .lnk 集合，报告新建数量（少量时以 debug 级列出明细）
+func reportNewLnks(label string, before, after map[string]struct{}) {
+	var created []string
+	for name := range after {
+		if _, ok := before[name]; !ok {
+			created = append(created, name)
+		}
+	}
+	sort.Strings(created)
+	logInfo("%s：新建 %d 个快捷方式", label, len(created))
+	if len(created) > 0 && len(created) <= 20 {
+		names := make([]string, len(created))
+		for i, name := range created {
+			names[i] = strings.TrimSuffix(name, ".lnk")
+		}
+		logDebug("新建明细：%s", strings.Join(names, "、"))
 	}
 }
 
@@ -91,6 +129,7 @@ func extractWindowsAppsShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
 
+	before := listLnkNames(targetDir)
 	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_APPS_DIR")
 $shell = New-Object -ComObject Shell.Application
@@ -110,6 +149,7 @@ foreach ($item in $folder.Items()) {
 }
 `
 	runPowershell(script, "VRTX_APPS_DIR="+targetDir)
+	reportNewLnks("Windows Apps", before, listLnkNames(targetDir))
 }
 
 // extractRecentShortcuts 复制 Windows 最近文件夹中的 .lnk 快捷方式。
@@ -117,7 +157,9 @@ func extractRecentShortcuts(shortcutDir string) {
 	homeDir, _ := os.UserHomeDir()
 	targetDir := filepath.Join(shortcutDir, "Recent")
 	os.MkdirAll(targetDir, 0755)
-	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"), targetDir)
+
+	n := copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"), targetDir)
+	logInfo("最近文件：写入 %d 个快捷方式", n)
 }
 
 // extractOfficeShortcuts 复制 Office 最近文件夹中的 .lnk 快捷方式。
@@ -125,13 +167,16 @@ func extractOfficeShortcuts(shortcutDir string) {
 	homeDir, _ := os.UserHomeDir()
 	targetDir := filepath.Join(shortcutDir, "Office")
 	os.MkdirAll(targetDir, 0755)
-	copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"), targetDir)
+
+	n := copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"), targetDir)
+	logInfo("Office 最近：写入 %d 个快捷方式", n)
 }
 
 func extractSystemShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "System")
 	os.MkdirAll(targetDir, 0755)
 
+	before := listLnkNames(targetDir)
 	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_SYS_DIR")
 $wshell = New-Object -ComObject WScript.Shell
@@ -156,6 +201,7 @@ foreach ($item in $items) {
 }
 `
 	runPowershell(script, "VRTX_SYS_DIR="+targetDir)
+	reportNewLnks("系统位置", before, listLnkNames(targetDir))
 }
 
 // extractDriveShortcuts 为每个可用盘符创建 .lnk 快捷方式。
@@ -169,6 +215,7 @@ func extractDriveShortcuts(shortcutDir string) {
 		return
 	}
 
+	before := listLnkNames(targetDir)
 	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
@@ -189,6 +236,7 @@ foreach ($drive in $drives) {
 		"VRTX_DRIVES_DIR="+targetDir,
 		"VRTX_DRIVE_LIST="+strings.Join(drives, ","),
 	)
+	reportNewLnks("磁盘驱动器", before, listLnkNames(targetDir))
 }
 
 // getAvailableDrives 检测当前系统可用的盘符。
@@ -206,8 +254,9 @@ func getAvailableDrives() []string {
 }
 
 // copyLnkFiles 递归遍历 srcDir，将 .lnk 文件按原目录结构复制到 dstDir。
-// 用 getUniquePath 处理同名冲突。
-func copyLnkFiles(srcDir, dstDir string) {
+// 用 getUniquePath 处理同名冲突。返回成功复制的文件数。
+func copyLnkFiles(srcDir, dstDir string) int {
+	copied := 0
 	filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -233,9 +282,13 @@ func copyLnkFiles(srcDir, dstDir string) {
 		}
 		if err := os.WriteFile(dst, data, 0644); err != nil {
 			logWarn("复制快捷方式失败: %v", err)
+			return nil
 		}
+		copied++
+		logDebug("复制 %s", relPath)
 		return nil
 	})
+	return copied
 }
 
 // getShortcutSrcDirs 返回需要监控变更的快捷方式源目录。

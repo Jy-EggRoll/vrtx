@@ -22,6 +22,7 @@ const (
 type logLevel string
 
 const (
+	levelDebug logLevel = "debug"
 	levelInfo  logLevel = "info"
 	levelWarn  logLevel = "warn"
 	levelError logLevel = "error"
@@ -104,6 +105,10 @@ func logInfo(format string, v ...any) { logWriter(levelInfo, green, format, v...
 func logWarn(format string, v ...any) { logWriter(levelWarn, yellow, format, v...) }
 
 func logError(format string, v ...any) { logWriter(levelError, red, format, v...) }
+
+// logDebug 输出细节级日志（逐文件动作等），无条件写入环形缓冲，
+// 由网页控制台按级别筛选显示；终端下以灰色弱化输出
+func logDebug(format string, v ...any) { logWriter(levelDebug, gray, format, v...) }
 
 func logFatal(format string, v ...any) {
 	logWriter(levelFatal, bold+red, format, v...)

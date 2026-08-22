@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // startWatch 以轮询方式监控文件变更，直到 ctx 被取消。
 // 监控架构：time.Ticker 周期性触发 → 对比文件 ModTime 判断是否变化 → 增量重建。
-// 书签和各快捷方式来源的检测相互独立，各自判断各自重建。
+// 书签和各快捷方式来源的检测相互独立，各自判断各自重建；
+// 触发重建时精确报告是哪个文件/目录/盘符发生了变化。
 func startWatch(ctx context.Context, outputDir string, interval time.Duration, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -44,9 +46,9 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 	for {
 		select {
 		case <-ticker.C:
-			// 书签变更检测：比较每个书签文件的 mtime
+			// 书签变更检测：比较每个书签文件的 mtime，收集具体变更文件
 			if watchBookmarks {
-				changed := false
+				var changedFiles []string
 				for _, p := range getBookmarkPaths() {
 					fi, err := os.Stat(p)
 					if err != nil {
@@ -55,20 +57,21 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 					prev, ok := bookmarkModTimes[p]
 					if !ok || fi.ModTime().After(prev) {
 						bookmarkModTimes[p] = fi.ModTime()
-						changed = true
+						changedFiles = append(changedFiles, p)
 					}
 				}
-				if changed {
-					logInfo("检测到书签变更，正在重建...")
+				if len(changedFiles) > 0 {
+					logInfo("书签文件已变更：%s", strings.Join(changedFiles, "、"))
+					logInfo("正在重建书签...")
 					os.RemoveAll(filepath.Join(outputDir, "Bookmarks"))
-					extractBookmarks(outputDir)
-					logInfo("书签重建完成！")
+					n := extractBookmarks(outputDir)
+					logInfo("书签重建完成：共 %d 个 .url", n)
 				}
 			}
 
 			// 快捷方式变更检测：比较源目录的 mtime 以及可用盘符变化
 			if watchSoftware || watchRecent || watchOffice || watchDrives {
-				changed := false
+				var changedDirs []string
 				if watchSoftware || watchRecent || watchOffice {
 					for _, dir := range getShortcutSrcDirs(watchSoftware, watchRecent, watchOffice) {
 						fi, err := os.Stat(dir)
@@ -78,24 +81,31 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 						prev, ok := shortcutModTimes[dir]
 						if !ok || fi.ModTime().After(prev) {
 							shortcutModTimes[dir] = fi.ModTime()
-							changed = true
+							changedDirs = append(changedDirs, dir)
 						}
 					}
 				}
 
+				var addedDrives, removedDrives []string
 				if watchDrives {
 					drives := getAvailableDrives()
-					if !driveListsEqual(drives, lastDrives) {
+					addedDrives, removedDrives = diffDrives(lastDrives, drives)
+					if len(addedDrives)+len(removedDrives) > 0 {
 						lastDrives = drives
-						changed = true
 					}
 				}
 
-				if changed {
-					logInfo("检测到快捷方式变更，正在重建...")
+				if len(changedDirs) > 0 || len(addedDrives) > 0 || len(removedDrives) > 0 {
+					if len(changedDirs) > 0 {
+						logInfo("快捷方式目录已变更：%s", strings.Join(changedDirs, "、"))
+					}
+					if len(addedDrives) > 0 || len(removedDrives) > 0 {
+						logInfo("盘符变化：新增 %s，移除 %s", driveDisplay(addedDrives), driveDisplay(removedDrives))
+					}
+					logInfo("正在重建快捷方式...")
 					os.RemoveAll(filepath.Join(outputDir, "Shortcuts"))
 					extractShortcuts(outputDir, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice)
-					logInfo("快捷方式重建完成！")
+					logInfo("快捷方式重建完成")
 				}
 			}
 
@@ -106,16 +116,36 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 	}
 }
 
-// driveListsEqual 比较两个盘符列表是否相同。
-// 不做排序对比，因为盘符顺序本身具有稳定性（C 永远在 D 前面）。
-func driveListsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+// diffDrives 求盘符列表的新增与移除差集。
+// 盘符顺序本身稳定（C 永远在 D 前），无需排序即可得到确定性结果。
+func diffDrives(oldDrives, newDrives []string) (added, removed []string) {
+	oldSet := make(map[string]struct{}, len(oldDrives))
+	for _, d := range oldDrives {
+		oldSet[d] = struct{}{}
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	newSet := make(map[string]struct{}, len(newDrives))
+	for _, d := range newDrives {
+		if _, ok := oldSet[d]; !ok {
+			added = append(added, d)
+		}
+		newSet[d] = struct{}{}
+	}
+	for _, d := range oldDrives {
+		if _, ok := newSet[d]; !ok {
+			removed = append(removed, d)
 		}
 	}
-	return true
+	return added, removed
+}
+
+// driveDisplay 将盘符字母列表格式化为可读文本（如 "E:\"、"无"）
+func driveDisplay(drives []string) string {
+	if len(drives) == 0 {
+		return "无"
+	}
+	out := make([]string, len(drives))
+	for i, d := range drives {
+		out[i] = d + `:\`
+	}
+	return strings.Join(out, "、")
 }

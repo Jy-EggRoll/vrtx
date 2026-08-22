@@ -186,6 +186,34 @@
         font-variant-numeric: tabular-nums;
       }
 
+      /* 级别筛选 chips（按最低显示级别过滤） */
+      .filters {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-left: auto;
+        padding-right: 14px;
+      }
+      .chip {
+        font-size: 10.5px;
+        padding: 2px 9px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text-muted);
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .chip:hover {
+        border-color: var(--sem-info);
+        color: var(--sem-info);
+      }
+      .chip.active {
+        background: var(--sem-info);
+        color: var(--card);
+        border-color: transparent;
+      }
+
       /* 日志列表 */
       #log-list {
         flex: 1;
@@ -266,6 +294,10 @@
         color: var(--sem-fatal);
         font-weight: 700;
       }
+      .log-level.debug {
+        background: color-mix(in srgb, var(--sem-debug) 15%, transparent);
+        color: var(--sem-debug);
+      }
 
       .log-msg {
         flex: 1;
@@ -342,6 +374,11 @@
       <section class="log-card" aria-label="日志输出">
         <div class="log-header">
           <span>日志流</span>
+          <div class="filters" id="filters">
+            <button class="chip active" data-min="all" type="button">全部</button>
+            <button class="chip" data-min="info" type="button">INFO+</button>
+            <button class="chip" data-min="warn" type="button">WARN+</button>
+          </div>
           <span class="count" id="entry-count">0 条</span>
         </div>
         <div id="log-list" role="log" aria-live="polite" aria-atomic="false">
@@ -399,6 +436,22 @@
         var countEl = document.getElementById("entry-count");
         var entryCount = 0;
 
+        /* 级别严重度排序，数值越大越严重；低于 minRank 的条目被隐藏 */
+        var RANK = { debug: 0, info: 1, warn: 2, error: 3, fatal: 3 };
+        var minRank = 0;
+
+        function rankOf(level) {
+          return RANK[level] !== undefined ? RANK[level] : 1;
+        }
+
+        function applyFilter() {
+          var items = list.querySelectorAll(".log-entry");
+          for (var i = 0; i < items.length; i++) {
+            items[i].style.display =
+              rankOf(items[i].dataset.level) >= minRank ? "" : "none";
+          }
+        }
+
         function showEmpty(text) {
           list.innerHTML =
             '<div class="empty-hint">' +
@@ -430,6 +483,8 @@
             escapeHtml(e.msg) +
             "</span>";
           hideEmpty();
+          if (rankOf(level) < minRank) div.style.display = "none";
+          div.dataset.level = level;
           list.appendChild(div);
           entryCount++;
           countEl.textContent = entryCount + " 条";
@@ -459,6 +514,21 @@
             showEmpty("已清空，等待日志…");
           }
         });
+
+        /* 级别筛选 chips：点击切换最低显示级别 */
+        var filters = document.getElementById("filters");
+        if (filters) {
+          filters.addEventListener("click", function (ev) {
+            var btn = ev.target.closest(".chip");
+            if (!btn) return;
+            var chips = filters.querySelectorAll(".chip");
+            for (var i = 0; i < chips.length; i++) {
+              chips[i].classList.toggle("active", chips[i] === btn);
+            }
+            minRank = btn.dataset.min === "all" ? 0 : rankOf(btn.dataset.min);
+            applyFilter();
+          });
+        }
       })();
     </script>
   </body>

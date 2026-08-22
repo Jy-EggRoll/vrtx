@@ -41,32 +41,46 @@ func getBookmarkPaths() []string {
 
 // extractBookmarks 遍历每个书签文件，为每个存在的文件启动一个 goroutine 并发处理。
 // 并发粒度是"每个浏览器文件"而非"每条书签"，避免 goroutine 过多。
-func extractBookmarks(outputDir string) {
+// 返回生成的 .url 总数。
+func extractBookmarks(outputDir string) int {
 	bookmarkDir := filepath.Join(outputDir, "Bookmarks")
 	os.MkdirAll(bookmarkDir, 0755)
 
-	var tasks []func()
+	var paths []string
 	for _, path := range getBookmarkPaths() {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			continue
 		}
-		p := path
-		tasks = append(tasks, func() { processBookmarkFile(p, bookmarkDir) })
+		paths = append(paths, path)
+	}
+
+	// 各 goroutine 把结果写入自己对应的槽位，避免并发写冲突
+	counts := make([]int, len(paths))
+	var tasks []func()
+	for i, p := range paths {
+		i, p := i, p
+		tasks = append(tasks, func() { counts[i] = processBookmarkFile(p, bookmarkDir) })
 	}
 	runConcurrent(tasks...)
+
+	total := 0
+	for _, c := range counts {
+		total += c
+	}
+	return total
 }
 
-func processBookmarkFile(path, bookmarkDir string) {
+func processBookmarkFile(path, bookmarkDir string) int {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		logError("读取书签文件失败: %v", err)
-		return
+		return 0
 	}
 
 	var root BookmarkRoot
 	if err := json.Unmarshal(data, &root); err != nil {
 		logError("解析书签 JSON 失败: %v", err)
-		return
+		return 0
 	}
 
 	var bookmarks []BookmarkInfo
@@ -80,6 +94,22 @@ func processBookmarkFile(path, bookmarkDir string) {
 		tasks = append(tasks, func() { createURLFile(bookmarkDir, b) })
 	}
 	runConcurrent(tasks...)
+
+	n := len(bookmarks)
+	logInfo("%s 书签：生成 %d 个 .url", browserLabel(path), n)
+	return n
+}
+
+// browserLabel 从书签文件路径推断浏览器名称，用于日志展示
+func browserLabel(path string) string {
+	switch {
+	case strings.Contains(path, "Edge"):
+		return "Edge"
+	case strings.Contains(path, "Chrome"):
+		return "Chrome"
+	default:
+		return "浏览器"
+	}
 }
 
 // collectBookmarkInfo 递归遍历 Chrome/Edge 书签 JSON 树。
@@ -134,7 +164,9 @@ func createURLFile(bookmarkDir string, bm BookmarkInfo) {
 	content := fmt.Sprintf("[InternetShortcut]\nURL=%s\n", bm.URL)
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		logWarn("创建快捷方式失败: %v", err)
+		return
 	}
+	logDebug("生成书签 %s", filename)
 }
 
 func extractHost(url string) string {
