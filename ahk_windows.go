@@ -19,14 +19,15 @@ const (
 var shell32 = windows.NewLazySystemDLL("shell32.dll")
 var procShellExecuteW = shell32.NewProc("ShellExecuteW")
 
-// ahkPaths 解析随包分发的 AHK 解释器与主脚本路径（相对 exe 目录，与 vrtx.json 同款定位方式）
+// ahkPaths 解析随包分发的 AHK 解释器与主脚本路径（相对 exe 目录，与 vrtx.json 同款定位方式）。
+// 解释器以 vrtxahk.exe 之名分发（即官方 AutoHotkey64.exe 更名版），使来源对使用者一目了然。
 func ahkPaths() (interpreter, script string) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", ""
 	}
 	dir := filepath.Join(filepath.Dir(exe), "ahk")
-	return filepath.Join(dir, "AutoHotkey64.exe"), filepath.Join(dir, "WindowJump.ahk")
+	return filepath.Join(dir, "vrtxahk.exe"), filepath.Join(dir, "WindowJump.ahk")
 }
 
 // launchAHK 以管理员权限拉起 AutoHotkey 运行 WindowJump.ahk（触发标准 UAC 授权框）。
