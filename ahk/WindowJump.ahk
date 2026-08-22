@@ -1,8 +1,7 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 #WinActivateForce
-
-A_IconVisible := false
+#NoTrayIcon
 
 ; vrtx 看门狗：父进程退出则自动结束脚本
 if A_Args.Length >= 1 {
