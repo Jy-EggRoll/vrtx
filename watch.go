@@ -119,7 +119,6 @@ func syncConfig(st *watchState) {
 			logError("创建新输出目录失败：%v", err)
 			return
 		}
-		markOwned(np)
 		runFullExtract(np)
 		st.resetBaselines(cfg)
 		logInfo("输出目录迁移完成")
@@ -130,10 +129,11 @@ func syncConfig(st *watchState) {
 	// 类别启停：启用→清掉对应子目录重建（避免与既有文件叠加产生 _1 副本）；
 	// 停用→跳过监控但保留已生成输出
 	if e.Bookmarks != st.prev.Bookmarks {
-		if e.Bookmarks && rebuildSubdir(st.outDir, "Bookmarks") {
+		if e.Bookmarks {
 			logInfo("书签提取已启用，正在重建...")
+			rebuildSubdir(st.outDir, "Bookmarks")
 			extractBookmarks(st.outDir)
-		} else if !e.Bookmarks {
+		} else {
 			logInfo("书签提取已停用（已有输出保留）")
 		}
 		st.bookmarkModTimes = nil
@@ -144,10 +144,11 @@ func syncConfig(st *watchState) {
 
 	if shortcutFlagsChanged(e, st.prev) {
 		on := e.Software || e.System || e.Drives || e.Recent || e.Office
-		if on && rebuildSubdir(st.outDir, "Shortcuts") {
+		if on {
 			logInfo("快捷方式提取配置已变更，正在重建...")
+			rebuildSubdir(st.outDir, "Shortcuts")
 			extractShortcuts(st.outDir, e.Software, e.System, e.Drives, e.Recent, e.Office)
-		} else if !on {
+		} else {
 			logInfo("快捷方式提取已停用（已有输出保留）")
 		}
 		st.shortcutModTimes = nil
@@ -161,10 +162,11 @@ func syncConfig(st *watchState) {
 	}
 
 	if e.VSCode != st.prev.VSCode {
-		if e.VSCode && rebuildSubdir(st.outDir, "VSCode") {
+		if e.VSCode {
 			logInfo("VS Code 提取已启用，正在重建...")
+			rebuildSubdir(st.outDir, "VSCode")
 			extractVSCodeShortcuts(st.outDir)
-		} else if !e.VSCode {
+		} else {
 			logInfo("VS Code 提取已停用（已有输出保留）")
 		}
 		st.vscodeModTimes = nil
@@ -176,16 +178,9 @@ func syncConfig(st *watchState) {
 	st.prev = e
 }
 
-// rebuildSubdir 清空输出目录下某个管理子目录；守卫校验失败时拒绝并返回 false，
-// 调用方应放弃对该子目录的重建
-func rebuildSubdir(outDir, name string) bool {
-	sub := filepath.Join(outDir, name)
-	if err := removeOwnedDir(sub); err != nil {
-		logError("清理 %s 失败，跳过重建：%v", sub, err)
-		return false
-	}
-	os.MkdirAll(sub, 0755)
-	return true
+// rebuildSubdir 清空输出目录下的管理子目录；根已通过所有权校验，子树天然可删
+func rebuildSubdir(outDir, name string) {
+	os.RemoveAll(filepath.Join(outDir, name))
 }
 
 // startWatch 监控主循环：每个 tick 先同步配置（热生效），再按当前配置做变更检测。
@@ -224,8 +219,9 @@ func startWatch(ctx context.Context) {
 						changedFiles = append(changedFiles, p)
 					}
 				}
-				if len(changedFiles) > 0 && rebuildSubdir(st.outDir, "Bookmarks") {
+				if len(changedFiles) > 0 {
 					logInfo("书签文件已变更：%s", strings.Join(changedFiles, "、"))
+					rebuildSubdir(st.outDir, "Bookmarks")
 					n := extractBookmarks(st.outDir)
 					logInfo("书签重建完成：共 %d 个 .url", n)
 				}
@@ -255,8 +251,7 @@ func startWatch(ctx context.Context) {
 						st.lastDrives = drives
 					}
 				}
-				if len(changedDirs)+len(addedDrives)+len(removedDrives) > 0 &&
-					rebuildSubdir(st.outDir, "Shortcuts") {
+				if len(changedDirs)+len(addedDrives)+len(removedDrives) > 0 {
 					if len(changedDirs) > 0 {
 						logInfo("快捷方式目录已变更：%s", strings.Join(changedDirs, "、"))
 					}
@@ -264,6 +259,7 @@ func startWatch(ctx context.Context) {
 						logInfo("盘符变化：新增 %s，移除 %s",
 							driveDisplay(addedDrives), driveDisplay(removedDrives))
 					}
+					rebuildSubdir(st.outDir, "Shortcuts")
 					extractShortcuts(st.outDir, e.Software, e.System, e.Drives, e.Recent, e.Office)
 					logInfo("快捷方式重建完成")
 				}
@@ -283,8 +279,9 @@ func startWatch(ctx context.Context) {
 						changedDBs = append(changedDBs, p)
 					}
 				}
-				if len(changedDBs) > 0 && rebuildSubdir(st.outDir, "VSCode") {
+				if len(changedDBs) > 0 {
 					logInfo("VS Code 历史记录已变更：%s", strings.Join(changedDBs, "、"))
+					rebuildSubdir(st.outDir, "VSCode")
 					n := extractVSCodeShortcuts(st.outDir)
 					logInfo("VS Code 快捷方式重建完成：新建 %d 个", n)
 				}
@@ -361,7 +358,6 @@ func cleanAndRebuild() {
 		logError("重建输出目录失败：%v", err)
 		return
 	}
-	markOwned(dir)
 	runFullExtract(dir)
 	logInfo("清理并重建完成")
 }

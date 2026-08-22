@@ -3,21 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
-// markerFileName 是输出目录的所有权标记；每次初始化/迁移后写入，
-// 供未来版本进一步收紧校验（当前规则不依赖它，兼容老版本残留目录）
-const markerFileName = ".vrtx-owned"
-
-// managedEntries 是 VRTX 输出目录的顶层条目白名单：
-// 删除准入与写入准入共用同一谓词——目录里只有这些东西才允许碰
+// managedEntries 是 VRTX 输出目录的顶层条目白名单。
+// .vrtx-owned 是旧版本写入的所有权标记：写入逻辑已删除，
+// 白名单仍保留该项，让存量标记在下次清场时被合法顺带清理。
 var managedEntries = map[string]bool{
-	"Bookmarks":    true,
-	"Shortcuts":    true,
-	"VSCode":       true,
-	markerFileName: true,
+	"Bookmarks":   true,
+	"Shortcuts":   true,
+	"VSCode":      true,
+	".vrtx-owned": true,
 }
 
 // ensureOwnedDir 是删/写两侧共用的底线校验：
@@ -47,15 +43,11 @@ func ensureOwnedDir(dir string) error {
 	return fmt.Errorf("该目录包含非 VRTX 内容：%s", strings.Join(foreign, "、"))
 }
 
-// removeOwnedDir 带所有权校验的目录删除：非 VRTX 目录拒绝清空
+// removeOwnedDir 带所有权校验的目录删除，仅限根级操作：
+// 根通过白名单即确立整棵树归 VRTX 所有，其下子目录无需再验。
 func removeOwnedDir(dir string) error {
 	if err := ensureOwnedDir(dir); err != nil {
 		return fmt.Errorf("拒绝删除 %s：%w", dir, err)
 	}
 	return os.RemoveAll(dir)
-}
-
-// markOwned 在输出目录写入所有权标记（尽力而为，失败不影响主流程）
-func markOwned(dir string) {
-	_ = os.WriteFile(filepath.Join(dir, markerFileName), []byte("此目录由 VRTX 管理，存放自动生成的快捷方式\n"), 0644)
 }

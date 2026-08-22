@@ -45,7 +45,6 @@ func main() {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		logFatal("无法创建输出目录: %v", err)
 	}
-	markOwned(outputDir)
 
 	// 通过 context 协调后台监控生命周期，SIGINT/SIGTERM 同样触发退出
 	ctx, cancel := context.WithCancel(context.Background())
