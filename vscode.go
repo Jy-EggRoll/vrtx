@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -28,7 +29,7 @@ type vscodeHistory struct {
 	Entries []vscodeEntry `json:"entries"`
 }
 
-// vscodeKind 标记条目类型，决定启动参数（--folder-uri/--file-uri）与命名后缀
+// vscodeKind 标记条目类型。文件类条目仅用于统计，不生成快捷方式。
 type vscodeKind int
 
 const (
@@ -71,7 +72,8 @@ func findCodeExe() string {
 	return ""
 }
 
-// extractVSCodeShortcuts 从 state.vscdb 的最近打开记录生成快捷方式（本地 + 远程），返回新建数量
+// extractVSCodeShortcuts 从 state.vscdb 的最近打开记录生成快捷方式（本地/远程的文件夹与工作区，
+// 单个文件的打开记录不生成），返回新建数量。
 func extractVSCodeShortcuts(outputDir string) int {
 	codeExe := findCodeExe()
 	if codeExe == "" {
@@ -101,12 +103,51 @@ func extractVSCodeShortcuts(outputDir string) int {
 		return 0
 	}
 
+	// 按类型统计并过滤掉文件类条目（信息量低，不生成）
+	var folders, workspaces, files int
+	kept := make([]vscodeEntry, 0, len(entries))
+	for _, e := range entries {
+		switch _, kind := classifyVSCode(e); kind {
+		case vscodeFolder:
+			folders++
+		case vscodeWorkspace:
+			workspaces++
+		case vscodeFile:
+			files++
+			continue
+		}
+		kept = append(kept, e)
+	}
+	logInfo("VS Code 历史：共 %d 条（文件夹 %d、工作区 %d、文件 %d）",
+		len(entries), folders, workspaces, files)
+	if len(kept) > 0 {
+		uris := make([]string, len(kept))
+		for i, e := range kept {
+			u, _ := classifyVSCode(e)
+			uris[i] = u
+		}
+		logDebug("VS Code 条目明细：%s", strings.Join(uris, "、"))
+	}
+	if len(kept) == 0 {
+		return 0
+	}
+
 	vscodeDir := filepath.Join(outputDir, "VSCode")
 	os.MkdirAll(vscodeDir, 0755)
 
 	before := listLnkNames(vscodeDir)
-	runPowershell(buildVSCodeLnkScript(vscodeDir, codeExe, entries))
-	return reportNewLnks("VS Code 连接", before, listLnkNames(vscodeDir))
+	runPowershell(buildVSCodeLnkScript(vscodeDir, codeExe, kept))
+
+	created := lnkDiff(before, listLnkNames(vscodeDir))
+	logInfo("已生成 %d 个快捷方式，跳过 %d 个文件类条目", len(created), files)
+	if len(created) > 0 && len(created) <= 20 {
+		names := make([]string, len(created))
+		for i, name := range created {
+			names[i] = strings.TrimSuffix(name, ".lnk")
+		}
+		logDebug("新建明细：%s", strings.Join(names, "、"))
+	}
+	return len(created)
 }
 
 // loadRecentEntries 读取单个 state.vscdb 的最近打开列表。
@@ -179,17 +220,23 @@ func uriBase(p string) string {
 	return p
 }
 
+// maxShortcutName 限制显示名长度，防止超长导致 NTFS 路径超限
+const maxShortcutName = 80
+
 // vscodeShortcutName 生成一眼可分辨的快捷方式名：
 //
-//	远程_<主机>_<名称>[_工作区|_文件].lnk   如 远程_devbox_api.lnk、远程_devbox_api_工作区.lnk
-//	本地_<名称>[_工作区|_文件].lnk         如 本地_proj.lnk、本地_readme_文件.lnk
+//	【远程 · starlab-linux】distributed-and-cloud-computing.lnk
+//	【远程 · starlab-linux】my-api【工作区】.lnk
+//	【本地】my-project.lnk
+//	【本地】notes【工作区】.lnk
 //
-// 规则：前缀区分远程/本地，远程必带主机名；Label 优先，无 Label 时取 URI 末段；
-// 文件夹为默认形态不加后缀，工作区/文件显式标注。
+// 不信任 VS Code 的 Label 字段——其值常为"完整路径 [SSH: 主机]"混合体，
+// 是此前下划线汤的根源；一律从 URI 解析：主机取 authority 中 "+" 之后段，
+// 名称取路径末段，Label 仅在解析结果为空时兜底。文件夹为默认形态不加后缀。
 func vscodeShortcutName(e vscodeEntry) string {
 	uri, kind := classifyVSCode(e)
 
-	var scope, display string // scope: "远程_host" 或 "本地"
+	var scope, display string
 	if rest, ok := strings.CutPrefix(uri, "vscode-remote://"); ok {
 		authority, rawPath := rest, ""
 		if i := strings.Index(rest, "/"); i >= 0 {
@@ -205,34 +252,49 @@ func vscodeShortcutName(e vscodeEntry) string {
 		if host == "" {
 			host = "remote"
 		}
-		scope = "远程_" + sanitizeFileName(host)
+		scope = "【远程 · " + sanitizeFileName(host) + "】"
 
-		if e.Label != "" {
-			display = e.Label
-		} else if dec, err := url.PathUnescape(rawPath); err == nil {
-			display = uriBase(dec)
+		if rawPath != "" {
+			if dec, err := url.PathUnescape(rawPath); err == nil {
+				rawPath = dec
+			}
+			display = uriBase(rawPath)
 		}
 	} else {
-		scope = "本地"
-		if e.Label != "" {
-			display = e.Label
-		} else {
-			display = uriBase(strings.TrimPrefix(uri, "file:///"))
+		scope = "【本地】"
+		p := strings.TrimPrefix(uri, "file:///")
+		if dec, err := url.PathUnescape(p); err == nil {
+			p = dec
 		}
+		display = uriBase(p)
 	}
 
+	if display == "" && e.Label != "" {
+		display = e.Label
+	}
 	if display == "" {
 		display = "unnamed"
 	}
 
-	name := scope + "_" + sanitizeFileName(display)
-	switch kind {
-	case vscodeWorkspace:
-		name += "_工作区"
-	case vscodeFile:
-		name += "_文件"
+	// 工作区条目去掉冗余的 .code-workspace 后缀，避免与【工作区】标签重复
+	if kind == vscodeWorkspace {
+		display = strings.TrimSuffix(strings.TrimSuffix(display, ".code-workspace"), ".CODE-WORKSPACE")
+	}
+
+	name := scope + truncateName(sanitizeFileName(display))
+	if kind == vscodeWorkspace {
+		name += "【工作区】"
 	}
 	return name
+}
+
+// truncateName 超长时截断显示名
+func truncateName(s string) string {
+	r := []rune(s)
+	if len(r) <= maxShortcutName {
+		return s
+	}
+	return string(r[:maxShortcutName])
 }
 
 // psSingleQuote 将字符串安全地包进 PowerShell 单引号字面量（” 转义内部单引号）
@@ -242,10 +304,20 @@ func psSingleQuote(s string) string {
 
 // buildVSCodeLnkScript 生成单个批量 PowerShell 脚本，
 // 一次进程内创建全部快捷方式（与 shortcuts.go 的批处理模式一致，避免逐条起进程）。
+// 同名条目自动追加 (2)(3) 序号去重，避免脚本内相互覆盖。
 func buildVSCodeLnkScript(dir, codeExe string, entries []vscodeEntry) string {
 	var b strings.Builder
 	b.WriteString("$wshell = New-Object -ComObject WScript.Shell\n")
+
+	seen := make(map[string]bool, len(entries))
 	for _, e := range entries {
+		base := vscodeShortcutName(e)
+		name := base
+		for i := 2; seen[name]; i++ {
+			name = fmt.Sprintf("%s(%d)", base, i)
+		}
+		seen[name] = true
+
 		uri, kind := classifyVSCode(e)
 		flag := "--folder-uri"
 		if kind != vscodeFolder {
@@ -254,11 +326,23 @@ func buildVSCodeLnkScript(dir, codeExe string, entries []vscodeEntry) string {
 		args := fmt.Sprintf(`%s "%s"`, flag, uri)
 
 		fmt.Fprintf(&b, "try {\n")
-		fmt.Fprintf(&b, "  $s = $wshell.CreateShortcut(%s)\n", psSingleQuote(filepath.Join(dir, vscodeShortcutName(e)+".lnk")))
+		fmt.Fprintf(&b, "  $s = $wshell.CreateShortcut(%s)\n", psSingleQuote(filepath.Join(dir, name+".lnk")))
 		fmt.Fprintf(&b, "  $s.TargetPath = %s\n", psSingleQuote(codeExe))
 		fmt.Fprintf(&b, "  $s.Arguments = %s\n", psSingleQuote(args))
 		fmt.Fprintf(&b, "  $s.Save()\n")
 		b.WriteString("} catch { }\n")
 	}
 	return b.String()
+}
+
+// lnkDiff 返回 after 相对 before 新增的 .lnk 文件名（排序保证确定性）
+func lnkDiff(before, after map[string]struct{}) []string {
+	var created []string
+	for name := range after {
+		if _, ok := before[name]; !ok {
+			created = append(created, name)
+		}
+	}
+	sort.Strings(created)
+	return created
 }
