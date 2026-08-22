@@ -31,6 +31,16 @@ func runPowershell(script string, env ...string) {
 	}
 }
 
+// powershellOut 执行脚本并返回标准输出，供需要读取结果的场景使用
+func powershellOut(script string, env ...string) (string, error) {
+	cmd := powershell(script)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
 // extractShortcuts 按开关并发启动已启用的提取任务：
 //
 //	software → StartMenu/ + WindowsApps/
