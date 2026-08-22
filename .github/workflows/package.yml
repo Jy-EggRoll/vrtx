@@ -63,8 +63,8 @@ jobs:
             - name: Verify source
               run: task verify
 
-            - name: Build binaries for all platforms
-              run: task build-all
+            - name: Build and package all platforms
+              run: task package
               env:
                   VERSION: ${{ steps.get_version.outputs.version }}
                   BUILDTIME: ${{ steps.get_build_time.outputs.buildtime }}
@@ -97,8 +97,8 @@ jobs:
                     echo ""
                     echo "| 架构 | 下载 |"
                     echo "|------|------|"
-                    echo "| Windows x64 | [vrtx-windows-amd64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-amd64.exe) |"
-                    echo "| Windows ARM64 | [vrtx-windows-arm64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-arm64.exe) |"
+                    echo "| Windows x64 | [vrtx-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-amd64.zip) |"
+                    echo "| Windows ARM64 | [vrtx-windows-arm64.zip](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-arm64.zip) |"
                   } > release_notes.md
 
             - name: Create development release (for tag runs only)
@@ -109,7 +109,7 @@ jobs:
                   name: "VRTX v${{ steps.get_version.outputs.version }} (开发版)"
                   body_path: release_notes.md
                   files: |
-                      build/*
+                      build/*.zip
                   draft: false
                   prerelease: true
               env:

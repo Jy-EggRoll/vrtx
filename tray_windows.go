@@ -80,6 +80,15 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		go func() {
 			runFullExtract(current().OutputPath())
 			logInfo("首次提取完成，进入监控模式（输出目录：%s）", current().OutputPath())
+
+			if current().AHK {
+				if err := launchAHK(); err != nil {
+					logInfo("未启动 AutoHotkey：%v", err)
+				} else {
+					logInfo("已拉起 AutoHotkey 脚本（管理员权限，随本程序退出自动结束）")
+				}
+			}
+
 			startWatch(ctx)
 		}()
 	}, func() {

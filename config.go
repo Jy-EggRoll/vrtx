@@ -33,6 +33,7 @@ type Config struct {
 	OutputDir       string        `json:"output_dir"`       // 空 = 默认 %TEMP%\VRTX
 	IntervalSeconds int           `json:"interval_seconds"` // 监控轮询间隔
 	Watch           bool          `json:"watch"`            // 监控模式总开关
+	AHK             bool          `json:"ahk"`              // 启动时经 UAC 以管理员权限拉起 AutoHotkey 脚本
 	Extract         ExtractConfig `json:"extract"`          // 各类别开关
 }
 
@@ -42,6 +43,7 @@ func defaultConfig() *Config {
 		OutputDir:       "",
 		IntervalSeconds: 1,
 		Watch:           true,
+		AHK:             true,
 		Extract: ExtractConfig{
 			Bookmarks: true,
 			Software:  true,
@@ -158,6 +160,7 @@ func modifiedFields(cur, def *Config) map[string]bool {
 		"output_dir":        cur.OutputDir != def.OutputDir,
 		"interval_seconds":  cur.IntervalSeconds != def.IntervalSeconds,
 		"watch":             cur.Watch != def.Watch,
+		"ahk":               cur.AHK != def.AHK,
 		"extract.bookmarks": cur.Extract.Bookmarks != def.Extract.Bookmarks,
 		"extract.software":  cur.Extract.Software != def.Extract.Software,
 		"extract.system":    cur.Extract.System != def.Extract.System,

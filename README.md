@@ -11,6 +11,7 @@ VRTX 是一个 Windows 常驻工具：把散落在系统各处的「入口」—
 - **网页设置面板**：运行时调整行为即刻生效，修改项高亮标记、支持单项重置
 - **系统托盘常驻**：单击开控制台，右键直达设置与清理
 - **开机自启开关**：托盘菜单一键切换，自动修复指向旧路径的失效启动项
+- **AutoHotkey 集成**：可选随主程序自动拉起 WindowJump 脚本（UAC 授权，主程序退出后自动跟随结束）
 
 ## 快速开始
 
@@ -156,7 +157,7 @@ task build-all
 ```
 
 - 需要 Go 1.26+ 与 [Task](https://taskfile.dev/)；`goversioninfo` 由任务流程调用，用于生成图标、版本信息与 DPI 清单资源（直接 `go build` 得到的 exe 不含这些资源）
-- 无 CGO 依赖，支持交叉编译：产物为 `build/vrtx-windows-amd64.exe` 与 `build/vrtx-windows-arm64.exe`
+- 无 CGO 依赖，支持交叉编译：发布产物为 `build/vrtx-windows-amd64.zip` 与 `build/vrtx-windows-arm64.zip`，压缩包内含 `vrtx.exe` 与完整的 `ahk/` 运行时（解释器 + 脚本 + 库），解压即用
 - 运行依赖：Windows 10+，PowerShell（Windows Apps / 系统位置 / 盘符 / VS Code 快捷方式经由 PowerShell 生成）
 - 命令行仅支持 `--version` / `-v` 查看版本
 

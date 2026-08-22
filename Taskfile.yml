@@ -90,6 +90,23 @@ tasks:
       - build:windows:amd64
       - build:windows:arm64
 
+  package:
+    desc: 构建全部平台并打包为发布压缩包（exe + AHK 解释器与脚本）
+    deps:
+      - build-all
+    cmds:
+      - rm -rf build/pkg && mkdir -p build/pkg/ahk
+      - cp -r ahk/. build/pkg/ahk/
+      # 用 Python 标准库压缩，避免依赖系统 zip 命令（CI 与本地行为一致）
+      - cp build/vrtx-windows-amd64.exe build/pkg/vrtx.exe
+      - cd build/pkg && python3 -m zipfile -c ../vrtx-windows-amd64.zip vrtx.exe ahk
+      - cp build/vrtx-windows-arm64.exe build/pkg/vrtx.exe
+      - cd build/pkg && python3 -m zipfile -c ../vrtx-windows-arm64.zip vrtx.exe ahk
+      - rm -rf build/pkg
+    generates:
+      - build/vrtx-windows-amd64.zip
+      - build/vrtx-windows-arm64.zip
+
   windows:
     desc: 本地构建 Windows amd64
     deps:

@@ -1,5 +1,6 @@
 #WinActivateForce
 
+#Include ./VrtxWatchdog.ahk
 #Include ./LoggerLib/Logger.ahk
 #Include ./VDLib/VD.ahk
 #Include ./WindowStyleLib/WindowStyle.ahk

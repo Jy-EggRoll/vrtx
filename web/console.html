@@ -592,7 +592,7 @@
           </fieldset>
 
           <fieldset>
-            <legend>监控</legend>
+            <legend>监控与集成</legend>
             <label class="field check">
               <input type="checkbox" data-key="watch"><span>启用监控模式（检测变更自动重建）</span>
               <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
@@ -602,6 +602,10 @@
               <input type="number" min="1" max="3600" data-key="interval_seconds">
               <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
             </div>
+            <label class="field check">
+              <input type="checkbox" data-key="ahk"><span>启动时拉起 AutoHotkey 脚本（需 UAC 授权，退出时自动结束）</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
           </fieldset>
 
           <div class="field row wide">
@@ -747,7 +751,7 @@
         var KEYS = [
           "extract.bookmarks", "extract.software", "extract.system",
           "extract.drives", "extract.recent", "extract.office", "extract.vscode",
-          "watch", "interval_seconds", "output_dir"
+          "watch", "ahk", "interval_seconds", "output_dir"
         ];
         var viewLog = document.getElementById("view-log");
         var viewSettings = document.getElementById("view-settings");
