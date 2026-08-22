@@ -1,6 +1,7 @@
 name: Package Development Release
 
 on:
+    pull_request: {}
     push:
         branches:
             - "**" # 任意分支的普通提交都构建开发版工件，方便测试下载

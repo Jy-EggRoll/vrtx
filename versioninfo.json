@@ -18,6 +18,10 @@
   "StringFileInfo": {
     "FileDescription": "VRTX-涡流",
     "ProductName": "VRTX",
-    "InternalName": "vrtx"
+    "InternalName": "vrtx",
+    "CompanyName": "EggRoll",
+    "LegalCopyright": "Copyright (C) EggRoll",
+    "LegalTrademarks": "VRTX",
+    "Comments": "Author: EggRoll"
   }
 }
