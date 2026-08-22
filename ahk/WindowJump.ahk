@@ -1,6 +1,16 @@
+#Requires AutoHotkey v2.0
+#SingleInstance Force
 #WinActivateForce
 
-#Include ./VrtxWatchdog.ahk
+A_IconVisible := false
+
+; vrtx 看门狗：父进程退出则自动结束脚本
+if A_Args.Length >= 1 {
+    vrtxParentPid := Integer(A_Args[1])
+    VrtxCheckParent := (*) => (ProcessExist(vrtxParentPid) ? 0 : ExitApp())
+    SetTimer VrtxCheckParent, 1000
+}
+
 #Include ./LoggerLib/Logger.ahk
 #Include ./VDLib/VD.ahk
 #Include ./WindowStyleLib/WindowStyle.ahk
