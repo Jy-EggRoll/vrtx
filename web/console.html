@@ -827,12 +827,12 @@
 
         function loadSettings() {
           fetch("/api/config")
-            .then(function (r) { return r.json(); })
+            .then(function (r) { return readAPIResponse(r); })
             .then(function (d) {
               curCfg = d.config; defCfg = d.defaults; modMap = d.modified || {};
               var ae = document.activeElement;
               var editing = ae && ae.closest && ae.closest("#view-settings") && ae.dataset && ae.dataset.key;
-              // 正在编辑的控件不被轮询覆盖；其余回显最新值
+              // 正在编辑的控件不被覆盖；其余回显最新值
               for (var i = 0; i < KEYS.length; i++) {
                 var k = KEYS[i];
                 var el = document.querySelector('[data-key="' + k + '"]');
@@ -841,7 +841,20 @@
               }
               renderMarks();
             })
-            .catch(function () {});
+            .catch(function (e) { setStatus(e && e.message ? e.message : "读取配置失败", false); });
+        }
+
+        /* 统一解析 API 响应：非 JSON（如误拿到 HTML）或 HTTP 错误一律抛出可见错误 */
+        function readAPIResponse(r) {
+          return r.text().then(function (t) {
+            var ct = r.headers.get("Content-Type") || "";
+            if (ct.indexOf("application/json") === -1 || t.charAt(0) !== "{") {
+              throw new Error("服务端返回异常（版本过旧？请重新构建）");
+            }
+            var d = JSON.parse(t);
+            if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+            return d;
+          });
         }
 
         function collect() {
@@ -865,10 +878,14 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(collect())
-          }).then(function (r) {
-            if (r.ok) { setStatus("已保存并生效 ✓", true); loadSettings(); }
-            else r.text().then(function (t) { setStatus(t || "保存失败", false); });
-          }).catch(function () { setStatus("保存失败（服务不可达）", false); });
+          })
+            .then(function (r) { return readAPIResponse(r); })
+            .then(function (d) {
+              if (!d.ok) throw new Error("服务端未确认保存");
+              setStatus("已保存并生效", true);
+              loadSettings();
+            })
+            .catch(function (e) { setStatus(e && e.message ? e.message : "保存失败", false); });
         }
 
         document.getElementById("btn-save").addEventListener("click", save);
@@ -883,11 +900,12 @@
 
         document.getElementById("btn-clean").addEventListener("click", function () {
           fetch("/api/clean", { method: "POST" })
-            .then(function (r) {
-              if (r.ok) setStatus("已开始清理并重建，详见控制台日志", true);
-              else r.text().then(function (t) { setStatus(t || "清理失败", false); });
+            .then(function (r) { return readAPIResponse(r); })
+            .then(function (d) {
+              if (!d.ok) throw new Error("服务端未确认");
+              setStatus("已开始清理并重建，详见控制台日志", true);
             })
-            .catch(function () { setStatus("清理失败（服务不可达）", false); });
+            .catch(function (e) { setStatus(e && e.message ? e.message : "清理失败", false); });
         });
 
         /* 单项重置：该项写回默认值并立即保存生效 */
@@ -902,10 +920,6 @@
           });
         }
 
-        /* 面板可见期间轻量轮询：同步外部手改 config.json 带来的变化 */
-        setInterval(function () {
-          if (!viewSettings.classList.contains("hidden")) loadSettings();
-        }, 4000);
         loadSettings();
       })();
     </script>

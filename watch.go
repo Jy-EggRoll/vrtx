@@ -6,7 +6,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 )
@@ -16,7 +15,6 @@ type watchState struct {
 	interval         time.Duration
 	outDir           string
 	ticker           *time.Ticker
-	cfgMtime         time.Time // 上次见到的 vrtx.json mtime，用于检测外部手改
 	prev             ExtractConfig
 	bookmarkModTimes map[string]time.Time
 	shortcutModTimes map[string]time.Time
@@ -31,9 +29,6 @@ func newWatchState(cfg *Config) *watchState {
 		prev:     cfg.Extract,
 	}
 	st.ticker = time.NewTicker(st.interval)
-	if fi, err := os.Stat(configPath); err == nil {
-		st.cfgMtime = fi.ModTime()
-	}
 	st.resetBaselines(cfg)
 	return st
 }
@@ -80,23 +75,10 @@ func statModTimes(paths []string) map[string]time.Time {
 	return m
 }
 
-// syncConfig 对比配置快照，应用可热更的变更：
-// 外部手改 vrtx.json 热载、轮询间隔调整、输出目录热切换、类别启停。
+// syncConfig 对比当前配置快照与监控状态，应用可热更的变更：
+// 轮询间隔调整、输出目录迁移、类别启停（均由网页面板保存触发）。
+// 运行中直接修改 vrtx.json 不会被感知——文件仅在启动时加载一次。
 func syncConfig(st *watchState) {
-	// 外部手改配置文件热载：自身保存造成的 mtime 变化因内容一致而静默跳过
-	if fi, err := os.Stat(configPath); err == nil && !fi.ModTime().Equal(st.cfgMtime) {
-		st.cfgMtime = fi.ModTime()
-		if nc := loadConfigFile(configPath); !reflect.DeepEqual(nc, current()) {
-			// 写入侧底线：新目录不合规就拒绝应用，继续用旧配置跑
-			if err := ensureOwnedDir(nc.OutputPath()); err != nil {
-				logError("配置文件中的输出目录不可用，保持当前设置：%v", err)
-			} else {
-				cfgPtr.Store(nc)
-				logInfo("已从配置文件重新加载设置")
-			}
-		}
-	}
-
 	cfg := current()
 	e := cfg.Extract
 

@@ -106,6 +106,7 @@ func initConfig() {
 }
 
 // loadConfigFile 加载配置：默认值打底 + JSON 覆盖合并；
+// 仅在启动时调用一次——运行中修改 vrtx.json 需重启生效。
 // 文件不存在或损坏时不炸程序，回退默认值且不覆盖坏文件
 func loadConfigFile(path string) *Config {
 	def := defaultConfig()

@@ -76,6 +76,13 @@ func startLogServer() (string, error) {
 	mux.HandleFunc("/api/config", apiConfigHandler)
 	// 清理输出：清空输出目录并按当前配置立即重建（内部走所有权守卫）
 	mux.HandleFunc("/api/clean", apiCleanHandler)
+	// 未知 API 路径返回 404 JSON，绝不落进 "/" 的 HTML 兜底——
+	// 否则前端会把页面当配置解析，一切失败都无声无息
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		writeJSON(w, map[string]any{"error": "unknown api endpoint"})
+	})
 
 	logServer = &http.Server{Handler: mux}
 	go logServer.Serve(ln)
