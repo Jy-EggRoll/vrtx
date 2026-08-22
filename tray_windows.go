@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	_ "embed"
-	"time"
 
 	"github.com/lutischan-ferenc/systray"
 	"golang.org/x/sys/windows"
@@ -45,44 +44,35 @@ func acquireSingleInstance() bool {
 	return true
 }
 
-// runTray 进入系统托盘模式：显示图标与菜单，后台运行提取+监控，直到用户退出
-func runTray(ctx context.Context, cancel context.CancelFunc, outputDir string, interval time.Duration, watch, bookmarks, software, system, drives, recent, office, vscode bool) {
+// runTray 进入系统托盘模式：显示图标与菜单，后台运行提取+监控，直到用户退出。
+// 行为配置全部来自全局配置快照（vrtx.json / 网页设置面板），不再经参数传入。
+func runTray(ctx context.Context, cancel context.CancelFunc) {
 	systray.Run(func() {
 		systray.SetIcon(iconData)
 		systray.SetTitle("VRTX")
 		systray.SetTooltip("VRTX 运行中")
 
-		mConsole := systray.AddMenuItem("打开控制台输出", "在浏览器中查看实时日志")
+		mConsole := systray.AddMenuItem("打开控制台", "在浏览器中查看实时日志")
+		mSettings := systray.AddMenuItem("打开设置", "在浏览器中调整运行行为")
+		mClean := systray.AddMenuItem("清理输出", "清空输出目录并立即重建")
+		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "退出 VRTX")
 
 		// 单击托盘图标即打开网页控制台（按用户习惯：单击开控制台）
-		systray.SetOnClick(func(menu systray.IMenu) { openConsole() })
+		systray.SetOnClick(func(menu systray.IMenu) { openConsole("") })
 
-		// 菜单点击事件：打开控制台 / 退出
-		mConsole.Click(func() { openConsole() })
+		// 菜单点击事件：控制台 / 设置 / 清理输出 / 退出
+		mConsole.Click(func() { openConsole("") })
+		mSettings.Click(func() { openConsole("#settings") })
+		mClean.Click(func() { go cleanAndRebuild() })
 		mQuit.Click(func() { systray.Quit() })
 
-		// 后台执行首次提取并进入监控循环，避免阻塞托盘消息循环
+		// 后台执行首次提取并进入监控循环，避免阻塞托盘消息循环；
+		// 提取范围与监控行为均实时读取配置快照
 		go func() {
-			if bookmarks {
-				logInfo("正在提取书签...")
-				extractBookmarks(outputDir)
-			}
-			if software || system || drives || recent || office {
-				logInfo("正在提取快捷方式...")
-				extractShortcuts(outputDir, software, system, drives, recent, office)
-			}
-			if vscode {
-				logInfo("正在提取 VS Code 连接...")
-				extractVSCodeShortcuts(outputDir)
-			}
-			logInfo("首次提取完成，进入监控模式（输出目录：%s）", outputDir)
-
-			if watch {
-				startWatch(ctx, outputDir, interval, bookmarks, software, system, drives, recent, office, vscode)
-			} else {
-				logInfo("已按 --watch=false 仅提取一次，托盘保持运行")
-			}
+			runFullExtract(current().OutputPath())
+			logInfo("首次提取完成，进入监控模式（输出目录：%s）", current().OutputPath())
+			startWatch(ctx)
 		}()
 	}, func() {
 		// 退出时停止监控并关闭网页控制台服务

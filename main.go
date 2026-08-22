@@ -2,73 +2,50 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 )
 
 // main 是程序入口，执行流程：
-//  1. 解析命令行参数
-//  2. 如果 --clean 则清理输出目录后直接退出
+//  1. --version/-v 打印版本后退出
+//  2. 加载 exe 同目录的 vrtx.json（不存在则生成默认配置）
 //  3. 清空并重建输出目录
-//  4. 提取书签和快捷方式（根据 flags）
-//  5. 如果 --watch=true，进入监控循环（轮询检测变更并增量重建）
-//  6. 如果 --watch=false，提取完成后直接退出
+//  4. 进入托盘模式：按配置执行提取与监控，行为变更全部通过网页设置面板或配置文件完成
 func main() {
-	// 在解析其余参数前优先处理 --version / -v，打印版本与构建时间后直接退出，
+	// 在其余逻辑前优先处理 --version / -v，打印版本与构建时间后直接退出，
 	// 版本号与构建时间由发布构建通过链接参数注入，详见 version.go
 	if hasVersionFlag() {
 		logInfo("VRTX v%s (build %s)", Version, BuildTime)
 		return
 	}
 
-	watch := flag.Bool("watch", true, "启用监控模式，检测到变更时自动重建")
-	interval := flag.Duration("interval", 1*time.Second, "监控轮询间隔")
-	outDir := flag.String("out", "", "输出目录（默认：系统临时目录下的 VRTX）")
-	clean := flag.Bool("clean", false, "清除所有输出文件后退出")
-	bookmarks := flag.Bool("bookmarks", true, "提取浏览器书签（Chrome / Edge）")
-	software := flag.Bool("software", true, "提取软件快捷方式（开始菜单 / Windows Apps）")
-	system := flag.Bool("system", true, "提取系统位置快捷方式（回收站 / 此电脑 / 用户目录 / 开机启动）")
-	drives := flag.Bool("drives", true, "提取磁盘根目录快捷方式（C: D: ...）")
-	recent := flag.Bool("recent", false, "提取 Windows 最近文件快捷方式")
-	office := flag.Bool("office", false, "提取 Office 最近文件快捷方式")
-	vscode := flag.Bool("vscode", true, "提取 VS Code 最近打开（本地 + 远程连接）")
-	flag.Parse()
-
-	outputDir := *outDir
-	if outputDir == "" {
-		outputDir = getOutputDir()
-	}
-
-	if *clean {
-		if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-			logInfo("输出目录不存在，无需清理: %s", outputDir)
-		} else {
-			os.RemoveAll(outputDir)
-			logInfo("已清除所有输出文件: %s", outputDir)
-		}
-		return
-	}
-
-	if !*bookmarks && !*software && !*system && !*drives && !*recent && !*office && !*vscode {
-		logInfo("未启用任何提取功能，退出")
-		return
-	}
-
-	// 每次启动先清空输出目录，避免上次残留文件干扰增量结果
-	os.RemoveAll(outputDir)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		logFatal("无法创建输出目录: %v", err)
-	}
-
-	// 单实例守卫：避免双击 exe 多次产生多个托盘图标（仅 Windows 有效）
+	// 单实例守卫必须最先执行：后续会读写 vrtx.json 和输出目录，
+	// 若放到配置加载之后，第二个实例会用陈旧内容覆盖第一个实例刚保存的设置
 	if !acquireSingleInstance() {
 		logError("VRTX 已在运行，请勿重复启动")
 		return
 	}
+
+	// 加载配置：唯一的行为控制来源（替代原命令行参数）
+	initConfig()
+
+	outputDir := current().OutputPath()
+
+	// 写入侧底线：配置的输出目录必须为空/不存在/纯 VRTX 内容，否则拒绝启动
+	if err := ensureOwnedDir(outputDir); err != nil {
+		logFatal("输出目录不可用：%s\n%v\n请更换 output_dir 配置，或手动清理该目录后重试。", outputDir, err)
+	}
+
+	// 每次启动先清空输出目录（凭所有权校验），避免残留文件干扰增量结果
+	if err := removeOwnedDir(outputDir); err != nil {
+		logFatal("无法清理输出目录：%v", err)
+	}
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		logFatal("无法创建输出目录: %v", err)
+	}
+	markOwned(outputDir)
 
 	// 通过 context 协调后台监控生命周期，SIGINT/SIGTERM 同样触发退出
 	ctx, cancel := context.WithCancel(context.Background())
@@ -80,13 +57,12 @@ func main() {
 		cancel()
 	}()
 
-	logInfo("Vortex 输出目录: %s", outputDir)
+	logInfo("VRTX 输出目录: %s", outputDir)
 
 	// 先声明 DPI 感知，再进入托盘模式（创建托盘菜单前），避免菜单文字模糊
 	setDPIAware()
 
-	// 进入系统托盘模式：后台执行提取与监控，直到用户从托盘菜单退出
-	runTray(ctx, cancel, outputDir, *interval, *watch, *bookmarks, *software, *system, *drives, *recent, *office, *vscode)
+	runTray(ctx, cancel)
 }
 
 // getOutputDir 按 TEMP → TMP → AppData\Local\Temp 优先级 fallback 获取临时目录，

@@ -364,13 +364,158 @@
           font-size: 12px;
         }
       }
+      /* 视图切换 */
+      .view {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .view.hidden { display: none; }
+
+      /* 顶栏 Tab */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      header h1 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+      .tabs { display: flex; gap: 6px; }
+      .tab {
+        font-family: inherit;
+        font-size: 12px;
+        padding: 4px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text-muted);
+        cursor: pointer;
+      }
+      .tab:hover { color: var(--sem-info); border-color: var(--sem-info); }
+      .tab.active {
+        background: var(--sem-info);
+        border-color: transparent;
+        color: var(--card);
+      }
+
+      /* 设置面板卡片 */
+      .panel-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 2px 10px var(--shadow);
+        overflow: hidden;
+        min-height: 0;
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      #save-status.ok { color: var(--sem-success); }
+      #save-status.err { color: var(--sem-error); }
+
+      .panel-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      fieldset {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      legend { font-size: 11.5px; color: var(--text-muted); padding: 0 6px; }
+
+      .field {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 8px;
+        border-left: 3px solid transparent;
+        border-radius: 4px;
+      }
+      .field.modified { border-left-color: var(--sem-warn); background: color-mix(in srgb, var(--sem-warn) 8%, transparent); }
+      .field input[type="checkbox"] { accent-color: var(--sem-info); width: 15px; height: 15px; cursor: pointer; }
+      .field .lab { color: var(--text); min-width: 130px; }
+      .field.row input[type="number"] {
+        width: 90px;
+      }
+      .field.row.wide input[type="text"] { flex: 1; }
+      .field input[type="text"], .field input[type="number"] {
+        font-family: inherit;
+        font-size: 12.5px;
+        padding: 5px 8px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+      }
+      .field input:focus { outline: none; border-color: var(--sem-info); }
+      .hint { margin: -6px 0 0; font-size: 11px; color: var(--text-muted); }
+
+      .reset-btn {
+        margin-left: auto;
+        font-family: inherit;
+        font-size: 11px;
+        width: 22px;
+        height: 22px;
+        line-height: 1;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text-muted);
+        cursor: pointer;
+        display: none;
+      }
+      .field.modified .reset-btn { display: inline-block; }
+      .reset-btn:hover { color: var(--sem-warn); border-color: var(--sem-warn); }
+
+      .actions { display: flex; gap: 10px; align-items: center; }
+      .actions button {
+        font-family: inherit;
+        font-size: 12.5px;
+        padding: 7px 16px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .actions button:hover { border-color: var(--sem-info); color: var(--sem-info); }
+      .actions button.primary {
+        background: var(--sem-info);
+        border-color: transparent;
+        color: var(--card);
+      }
+      .actions button.danger:hover { border-color: var(--sem-error); color: var(--sem-error); }
     </style>
   </head>
   <body>
     <header>
-      <h1>VRTX 控制台 <span class="badge">实时</span></h1>
+      <h1>VRTX <span class="badge">实时</span></h1>
+      <nav class="tabs">
+        <button class="tab active" data-view="log" type="button">控制台</button>
+        <button class="tab" data-view="settings" type="button">设置</button>
+      </nav>
     </header>
-    <main>
+    <main id="view-log" class="view">
       <section class="log-card" aria-label="日志输出">
         <div class="log-header">
           <span>日志流</span>
@@ -402,6 +547,74 @@
               />
             </svg>
             <span>等待日志…</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <main id="view-settings" class="view hidden">
+      <section class="panel-card" aria-label="运行设置">
+        <div class="panel-header">
+          <span>运行设置</span>
+          <span id="save-status"></span>
+        </div>
+        <div class="panel-body">
+          <fieldset>
+            <legend>提取类别</legend>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.bookmarks"><span>浏览器书签</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.software"><span>软件快捷方式（开始菜单 / Windows Apps）</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.system"><span>系统位置快捷方式</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.drives"><span>磁盘盘符快捷方式</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.recent"><span>最近文件</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.office"><span>Office 最近文件</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <label class="field check">
+              <input type="checkbox" data-key="extract.vscode"><span>VS Code 最近打开（本地 + 远程）</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>监控</legend>
+            <label class="field check">
+              <input type="checkbox" data-key="watch"><span>启用监控模式（检测变更自动重建）</span>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </label>
+            <div class="field row">
+              <span class="lab">轮询间隔（秒）</span>
+              <input type="number" min="1" max="3600" data-key="interval_seconds">
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </div>
+          </fieldset>
+
+          <div class="field row wide">
+            <span class="lab">输出目录（留空使用默认临时目录）</span>
+            <input type="text" data-key="output_dir" placeholder="%TEMP%\VRTX" spellcheck="false">
+            <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+          </div>
+          <p class="hint">目录必须为空或仅含 VRTX 生成的内容；含其他文件的目录会被拒绝，绝不误删。</p>
+
+          <div class="actions">
+            <button id="btn-save" class="primary" type="button">保存并生效</button>
+            <button id="btn-restore" type="button">恢复默认</button>
+            <button id="btn-clean" class="danger" type="button">立即清理并重建</button>
           </div>
         </div>
       </section>
@@ -529,6 +742,171 @@
             applyFilter();
           });
         }
+
+        /* ================= 设置面板 ================= */
+        var KEYS = [
+          "extract.bookmarks", "extract.software", "extract.system",
+          "extract.drives", "extract.recent", "extract.office", "extract.vscode",
+          "watch", "interval_seconds", "output_dir"
+        ];
+        var viewLog = document.getElementById("view-log");
+        var viewSettings = document.getElementById("view-settings");
+        var statusEl = document.getElementById("save-status");
+        var curCfg = null, defCfg = null, modMap = {};
+
+        function showView(name) {
+          var isSettings = name === "settings";
+          viewLog.classList.toggle("hidden", isSettings);
+          viewSettings.classList.toggle("hidden", !isSettings);
+          var tabs = document.querySelectorAll(".tab");
+          for (var i = 0; i < tabs.length; i++) {
+            tabs[i].classList.toggle("active", tabs[i].dataset.view === name);
+          }
+        }
+        var tabBtns = document.querySelectorAll(".tab");
+        for (var ti = 0; ti < tabBtns.length; ti++) {
+          tabBtns[ti].addEventListener("click", function () {
+            location.hash = this.dataset.view === "settings" ? "#settings" : "";
+            showView(this.dataset.view);
+          });
+        }
+        window.addEventListener("hashchange", function () {
+          showView(location.hash === "#settings" ? "settings" : "log");
+        });
+        showView(location.hash === "#settings" ? "settings" : "log");
+
+        function getPath(o, p) {
+          var ks = p.split("."), t = o;
+          for (var i = 0; i < ks.length; i++) {
+            if (t == null) return undefined;
+            t = t[ks[i]];
+          }
+          return t;
+        }
+        function setPath(o, p, v) {
+          var ks = p.split("."), t = o;
+          for (var i = 0; i < ks.length - 1; i++) t = t[ks[i]];
+          t[ks[ks.length - 1]] = v;
+        }
+
+        function setStatus(msg, ok) {
+          if (!msg) { statusEl.textContent = ""; return; }
+          statusEl.textContent = msg;
+          statusEl.className = ok ? "ok" : "err";
+          setTimeout(function () { statusEl.textContent = ""; }, 3000);
+        }
+
+        function fillForm(cfg) {
+          for (var i = 0; i < KEYS.length; i++) {
+            var el = document.querySelector('[data-key="' + KEYS[i] + '"]');
+            if (!el) continue;
+            var v = getPath(cfg, KEYS[i]);
+            if (el.type === "checkbox") el.checked = !!v;
+            else el.value = v === undefined || v === null ? "" : v;
+          }
+          renderMarks();
+        }
+
+        /* 修改标记：黄条 + 单项重置按钮，仅对「当前值 ≠ 默认值」的项显示 */
+        function renderMarks() {
+          var rows = document.querySelectorAll("#view-settings .field");
+          for (var i = 0; i < rows.length; i++) {
+            var el = rows[i].querySelector("[data-key]");
+            if (!el) continue;
+            var mod = !!modMap[el.dataset.key];
+            rows[i].classList.toggle("modified", mod);
+            var btn = rows[i].querySelector(".reset-btn");
+            if (btn) btn.style.display = mod ? "" : "none";
+          }
+        }
+
+        function setControl(el, v) {
+          if (el.type === "checkbox") el.checked = !!v;
+          else el.value = v === undefined || v === null ? "" : v;
+        }
+
+        function loadSettings() {
+          fetch("/api/config")
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              curCfg = d.config; defCfg = d.defaults; modMap = d.modified || {};
+              var ae = document.activeElement;
+              var editing = ae && ae.closest && ae.closest("#view-settings") && ae.dataset && ae.dataset.key;
+              // 正在编辑的控件不被轮询覆盖；其余回显最新值
+              for (var i = 0; i < KEYS.length; i++) {
+                var k = KEYS[i];
+                var el = document.querySelector('[data-key="' + k + '"]');
+                if (!el || (editing && ae === el)) continue;
+                setControl(el, getPath(curCfg, k));
+              }
+              renderMarks();
+            })
+            .catch(function () {});
+        }
+
+        function collect() {
+          var c = JSON.parse(JSON.stringify(curCfg));
+          for (var i = 0; i < KEYS.length; i++) {
+            var k = KEYS[i];
+            var el = document.querySelector('[data-key="' + k + '"]');
+            if (!el) continue;
+            var v;
+            if (el.type === "checkbox") v = el.checked;
+            else if (k === "interval_seconds") v = parseInt(el.value, 10) || 0;
+            else v = el.value;
+            setPath(c, k, v);
+          }
+          return c;
+        }
+
+        function save() {
+          if (!curCfg || !defCfg) { setStatus("配置尚未加载，请稍候", false); return; }
+          fetch("/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(collect())
+          }).then(function (r) {
+            if (r.ok) { setStatus("已保存并生效 ✓", true); loadSettings(); }
+            else r.text().then(function (t) { setStatus(t || "保存失败", false); });
+          }).catch(function () { setStatus("保存失败（服务不可达）", false); });
+        }
+
+        document.getElementById("btn-save").addEventListener("click", save);
+
+        document.getElementById("btn-restore").addEventListener("click", function () {
+          for (var i = 0; i < KEYS.length; i++) {
+            var el = document.querySelector('[data-key="' + KEYS[i] + '"]');
+            if (el) setControl(el, getPath(defCfg, KEYS[i]));
+          }
+          save();
+        });
+
+        document.getElementById("btn-clean").addEventListener("click", function () {
+          fetch("/api/clean", { method: "POST" })
+            .then(function (r) {
+              if (r.ok) setStatus("已开始清理并重建，详见控制台日志", true);
+              else r.text().then(function (t) { setStatus(t || "清理失败", false); });
+            })
+            .catch(function () { setStatus("清理失败（服务不可达）", false); });
+        });
+
+        /* 单项重置：该项写回默认值并立即保存生效 */
+        var resetBtns = document.querySelectorAll("#view-settings .reset-btn");
+        for (var ri = 0; ri < resetBtns.length; ri++) {
+          resetBtns[ri].addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            var row = this.closest(".field");
+            var el = row && row.querySelector("[data-key]");
+            if (!el || !defCfg) return;            setControl(el, getPath(defCfg, el.dataset.key));
+            save();
+          });
+        }
+
+        /* 面板可见期间轻量轮询：同步外部手改 config.json 带来的变化 */
+        setInterval(function () {
+          if (!viewSettings.classList.contains("hidden")) loadSettings();
+        }, 4000);
+        loadSettings();
       })();
     </script>
   </body>
