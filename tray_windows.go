@@ -54,7 +54,6 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 
 		mConsole := systray.AddMenuItem("打开控制台", "在浏览器中查看实时日志")
 		mSettings := systray.AddMenuItem("打开设置", "在浏览器中调整运行行为")
-		mClean := systray.AddMenuItem("清理输出", "清空输出目录并立即重建")
 		mAuto := systray.AddMenuItemCheckbox("开机自动启动", "在系统启动时自动运行 VRTX", autostartFileExists())
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "退出 VRTX")
@@ -62,10 +61,9 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		// 单击托盘图标即打开网页控制台（按用户习惯：单击开控制台）
 		systray.SetOnClick(func(menu systray.IMenu) { openConsole("") })
 
-		// 菜单点击事件：控制台 / 设置 / 清理输出 / 自启开关 / 退出
+		// 菜单点击事件：控制台 / 设置 / 自启开关 / 退出
 		mConsole.Click(func() { openConsole("") })
 		mSettings.Click(func() { openConsole("#settings") })
-		mClean.Click(func() { go cleanAndRebuild() })
 		mAuto.Click(func() { toggleAutoStart(mAuto) })
 		mQuit.Click(func() { systray.Quit() })
 

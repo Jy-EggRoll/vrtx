@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/lutischan-ferenc/systray"
 )
@@ -62,27 +61,44 @@ func startupLnkPath() string {
 
 // detectAutoStart 三态判定：
 //
-//	不存在 → Off；存在且指向当前 exe → On；存在但指向别处 → Stale。
+//	不存在 → Off；存在且指向当前 exe → On；存在但指向别处或无法验证 → Stale。
 //	"已开启"必须同时满足存在且指向自己；一切异常态归入 Stale，单击即覆盖修复。
 func detectAutoStart() autostartState {
 	lnk := startupLnkPath()
 	if _, err := os.Stat(lnk); err != nil {
 		return autostartOff
 	}
-	target, err := readLnkTarget(lnk)
-	if err != nil {
-		logDebug("读取自启动快捷方式目标失败：%v", err)
-		return autostartStale // 无法验证归属时按可疑处理，点击会重建修复
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		logDebug("定位自身可执行文件失败：%v", err)
-		return autostartStale
-	}
-	if strings.EqualFold(filepath.Clean(target), filepath.Clean(exe)) {
+	if lnkTargetMatchesExe(lnk) {
 		return autostartOn
 	}
 	return autostartStale
+}
+
+// lnkTargetMatchesExe 判定 lnk 的目标是否就是当前运行的 exe。
+// 比较全程在 PowerShell 内部完成——Get-Item 归一化 8.3 短路径与大小写，
+// 跨进程边界只传递 'SAME'/'DIFF' 纯 ASCII 判定词，
+// 规避 PS 控制台编码（GBK/UTF-8）与路径形态差异导致的误判。
+func lnkTargetMatchesExe(lnk string) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		logDebug("定位自身可执行文件失败：%v", err)
+		return false
+	}
+	script := fmt.Sprintf(`
+$ws = New-Object -ComObject WScript.Shell
+$t = $ws.CreateShortcut(%s).TargetPath
+try {
+  $a = Get-Item -LiteralPath $t -ErrorAction Stop
+  $b = Get-Item -LiteralPath %s -ErrorAction Stop
+  if ($a.FullName -ieq $b.FullName) { 'SAME' } else { 'DIFF' }
+} catch { 'DIFF' }
+`, psSingleQuote(lnk), psSingleQuote(exe))
+	out, err := powershellOut(script)
+	if err != nil {
+		logDebug("读取自启动快捷方式目标失败：%v", err)
+		return false
+	}
+	return out == "SAME"
 }
 
 // enableAutoStart 创建/覆盖自启动快捷方式，指向当前运行的 exe。
@@ -114,14 +130,4 @@ func disableAutoStart() error {
 		return err
 	}
 	return nil
-}
-
-// readLnkTarget 读取 .lnk 的 TargetPath（与创建同走 PowerShell/WScript.Shell）
-func readLnkTarget(lnkPath string) (string, error) {
-	script := fmt.Sprintf(`
-$ws = New-Object -ComObject WScript.Shell
-$s = $ws.CreateShortcut(%s)
-$s.TargetPath
-`, psSingleQuote(lnkPath))
-	return powershellOut(script)
 }
