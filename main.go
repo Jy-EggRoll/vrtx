@@ -35,6 +35,7 @@ func main() {
 	drives := flag.Bool("drives", true, "提取磁盘根目录快捷方式（C: D: ...）")
 	recent := flag.Bool("recent", false, "提取 Windows 最近文件快捷方式")
 	office := flag.Bool("office", false, "提取 Office 最近文件快捷方式")
+	vscode := flag.Bool("vscode", true, "提取 VS Code 最近打开（本地 + 远程连接）")
 	flag.Parse()
 
 	outputDir := *outDir
@@ -52,7 +53,7 @@ func main() {
 		return
 	}
 
-	if !*bookmarks && !*software && !*system && !*drives && !*recent && !*office {
+	if !*bookmarks && !*software && !*system && !*drives && !*recent && !*office && !*vscode {
 		logInfo("未启用任何提取功能，退出")
 		return
 	}
@@ -85,7 +86,7 @@ func main() {
 	setDPIAware()
 
 	// 进入系统托盘模式：后台执行提取与监控，直到用户从托盘菜单退出
-	runTray(ctx, cancel, outputDir, *interval, *watch, *bookmarks, *software, *system, *drives, *recent, *office)
+	runTray(ctx, cancel, outputDir, *interval, *watch, *bookmarks, *software, *system, *drives, *recent, *office, *vscode)
 }
 
 // getOutputDir 按 TEMP → TMP → AppData\Local\Temp 优先级 fallback 获取临时目录，

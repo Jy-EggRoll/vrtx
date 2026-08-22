@@ -46,7 +46,7 @@ func acquireSingleInstance() bool {
 }
 
 // runTray 进入系统托盘模式：显示图标与菜单，后台运行提取+监控，直到用户退出
-func runTray(ctx context.Context, cancel context.CancelFunc, outputDir string, interval time.Duration, watch, bookmarks, software, system, drives, recent, office bool) {
+func runTray(ctx context.Context, cancel context.CancelFunc, outputDir string, interval time.Duration, watch, bookmarks, software, system, drives, recent, office, vscode bool) {
 	systray.Run(func() {
 		systray.SetIcon(iconData)
 		systray.SetTitle("VRTX")
@@ -72,10 +72,14 @@ func runTray(ctx context.Context, cancel context.CancelFunc, outputDir string, i
 				logInfo("正在提取快捷方式...")
 				extractShortcuts(outputDir, software, system, drives, recent, office)
 			}
+			if vscode {
+				logInfo("正在提取 VS Code 连接...")
+				extractVSCodeShortcuts(outputDir)
+			}
 			logInfo("首次提取完成，进入监控模式（输出目录：%s）", outputDir)
 
 			if watch {
-				startWatch(ctx, outputDir, interval, bookmarks, software, system, drives, recent, office)
+				startWatch(ctx, outputDir, interval, bookmarks, software, system, drives, recent, office, vscode)
 			} else {
 				logInfo("已按 --watch=false 仅提取一次，托盘保持运行")
 			}

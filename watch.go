@@ -12,7 +12,7 @@ import (
 // 监控架构：time.Ticker 周期性触发 → 对比文件 ModTime 判断是否变化 → 增量重建。
 // 书签和各快捷方式来源的检测相互独立，各自判断各自重建；
 // 触发重建时精确报告是哪个文件/目录/盘符发生了变化。
-func startWatch(ctx context.Context, outputDir string, interval time.Duration, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice bool) {
+func startWatch(ctx context.Context, outputDir string, interval time.Duration, watchBookmarks, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice, watchVSCode bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -39,6 +39,16 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 	}
 	if watchDrives {
 		lastDrives = getAvailableDrives()
+	}
+
+	var vscodeModTimes map[string]time.Time
+	if watchVSCode {
+		vscodeModTimes = make(map[string]time.Time)
+		for _, p := range getVSCodeDBPaths() {
+			if fi, err := os.Stat(p); err == nil {
+				vscodeModTimes[p] = fi.ModTime()
+			}
+		}
 	}
 
 	logInfo("监控已启动，轮询间隔 %v（按 Ctrl+C 停止）", interval)
@@ -106,6 +116,29 @@ func startWatch(ctx context.Context, outputDir string, interval time.Duration, w
 					os.RemoveAll(filepath.Join(outputDir, "Shortcuts"))
 					extractShortcuts(outputDir, watchSoftware, watchSystem, watchDrives, watchRecent, watchOffice)
 					logInfo("快捷方式重建完成")
+				}
+			}
+
+			// VS Code 历史记录检测：比较 state.vscdb 的 mtime
+			if watchVSCode {
+				var changedDBs []string
+				for _, p := range getVSCodeDBPaths() {
+					fi, err := os.Stat(p)
+					if err != nil {
+						continue
+					}
+					prev, ok := vscodeModTimes[p]
+					if !ok || fi.ModTime().After(prev) {
+						vscodeModTimes[p] = fi.ModTime()
+						changedDBs = append(changedDBs, p)
+					}
+				}
+				if len(changedDBs) > 0 {
+					logInfo("VS Code 历史记录已变更：%s", strings.Join(changedDBs, "、"))
+					logInfo("正在重建 VS Code 快捷方式...")
+					os.RemoveAll(filepath.Join(outputDir, "VSCode"))
+					n := extractVSCodeShortcuts(outputDir)
+					logInfo("VS Code 快捷方式重建完成：新建 %d 个", n)
 				}
 			}
 

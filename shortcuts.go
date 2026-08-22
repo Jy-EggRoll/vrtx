@@ -102,8 +102,9 @@ func listLnkNames(dir string) map[string]struct{} {
 	return names
 }
 
-// reportNewLnks 对比执行前后的 .lnk 集合，报告新建数量（少量时以 debug 级列出明细）
-func reportNewLnks(label string, before, after map[string]struct{}) {
+// reportNewLnks 对比执行前后的 .lnk 集合，报告新建数量（少量时以 debug 级列出明细）。
+// 返回新建数量，供调用方聚合统计。
+func reportNewLnks(label string, before, after map[string]struct{}) int {
 	var created []string
 	for name := range after {
 		if _, ok := before[name]; !ok {
@@ -119,6 +120,7 @@ func reportNewLnks(label string, before, after map[string]struct{}) {
 		}
 		logDebug("新建明细：%s", strings.Join(names, "、"))
 	}
+	return len(created)
 }
 
 // extractWindowsAppsShortcuts 通过 COM 枚举 shell:AppsFolder 虚拟文件夹，
