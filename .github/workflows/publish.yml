@@ -171,6 +171,10 @@ jobs:
                     echo "| 安装器 | x64 | [vrtx-setup-x64.exe](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-setup-x64.exe) |"
                     echo "| 便携版 | x64 | [vrtx-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-amd64.zip) |"
                     echo "| 便携版 | ARM64 | [vrtx-windows-arm64.zip](https://github.com/${{ github.repository }}/releases/download/$CUR/vrtx-windows-arm64.zip) |"
+                    echo ""
+                    echo "## ARM64 说明"
+                    echo ""
+                    echo "ARM64 构建并非全组件原生适配：AutoHotkey 解释器与拼音库等仍为 x64 版本，依赖 Windows 的 x64 转译层运行，可能存在不稳定或未知的问题。ARM64 设备建议直接使用压缩包（便携）版本。"
                   } > release_notes.md
 
             - name: Create GitHub Release

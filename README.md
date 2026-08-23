@@ -158,6 +158,7 @@ task build-all
 
 - 需要 Go 1.26+ 与 [Task](https://taskfile.dev/)；`goversioninfo` 由任务流程调用，用于生成图标、版本信息与 DPI 清单资源（直接 `go build` 得到的 exe 不含这些资源）
 - 无 CGO 依赖，支持交叉编译：发布产物为安装器 `vrtx-setup-x64.exe`（Inno Setup，per-user 安装、中英双语向导）与便携包 `build/vrtx-windows-amd64.zip` / `build/vrtx-windows-arm64.zip`（内含 `vrtx.exe` 与完整 `ahk/` 运行时，解压即用）
+- **ARM64 说明**：ARM64 构建并非全组件原生适配——AutoHotkey 解释器与拼音库等仍为 x64 版本，依赖 Windows 的 x64 转译层运行，可能存在不稳定或未知的问题；请酌情慎重使用，ARM64 设备建议直接使用压缩包（便携）版本
 - 运行依赖：Windows 10+，PowerShell（Windows Apps / 系统位置 / 盘符 / VS Code 快捷方式经由 PowerShell 生成）
 - 命令行仅支持 `--version` / `-v` 查看版本
 
