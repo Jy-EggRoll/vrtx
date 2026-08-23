@@ -213,7 +213,7 @@ WindowJump(pinyinPartialMatch := "") {
     r_phys := 20 * scaleFactor
     WinSetRegion("0-0 w" . w_phys . " h" . h_phys . " r" . r_phys . "-" . r_phys, MyGui.Hwnd)
 
-    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Delete 关闭窗口")
+    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签 | v VSCode")
 
     EditBox := MyGui.Add("Edit", "x20 y45 w560 h22 vSearchInput -E0x200 Background" . ListViewBg)
 
