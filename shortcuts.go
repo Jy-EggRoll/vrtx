@@ -233,7 +233,16 @@ $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell
 foreach ($drive in $drives) {
+    # 获取卷标
+    $volume = Get-Volume -DriveLetter $drive -ErrorAction SilentlyContinue
+    $label = ""
+    if ($volume) { $label = $volume.FileSystemLabel }
+    
+    # 构建文件名：有卷标则 "C (Label).lnk"，否则 "C.lnk"
     $name = $drive
+    if ($volume -and $volume.FileSystemLabel) {
+        $name = "$drive ($($volume.FileSystemLabel))"
+    }
     $path = Join-Path $dir ($name + ".lnk")
     if (!(Test-Path $path)) {
         try {
