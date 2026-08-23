@@ -24,6 +24,7 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExeName}
+DisableProgramGroupPage=yes
 
 [Languages]
 Name: "chinese"; MessagesFile: "ChineseSimplified.isl"
@@ -48,8 +49,10 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 [Run]
 Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchProgram,{#AppName}}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
-; 运行期产生的临时解包目录（如存在）；vrtx.json 按便携模型刻意保留，不在清理范围
+; 运行期产生的临时解包文件与配置；自启动开关可能创建的 lnk 一并清理（不存在则静默跳过）
 Type: filesandordirs; Name: "{localappdata}\Temp\vrtx-vscdb-*.tmp"
+Type: files; Name: "{app}\vrtx.json"
+Type: files; Name: "{userappdata}\Microsoft\Windows\Start Menu\Programs\Startup\VRTX.lnk"
