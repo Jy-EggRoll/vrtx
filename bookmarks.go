@@ -88,12 +88,9 @@ func processBookmarkFile(path, bookmarkDir string) int {
 		collectBookmarkInfo(&node, "", &bookmarks)
 	}
 
-	var tasks []func()
 	for _, bm := range bookmarks {
-		b := bm
-		tasks = append(tasks, func() { createURLFile(bookmarkDir, b) })
+		createURLFile(bookmarkDir, bm)
 	}
-	runConcurrent(tasks...)
 
 	n := len(bookmarks)
 	logInfo("%s 书签：生成 %d 个 .url", browserLabel(path), n)
@@ -184,11 +181,13 @@ func extractHost(url string) string {
 	return host
 }
 
+var invalidReplacer = strings.NewReplacer(
+	"<", "_", ">", "_", ":", "_", "\"", "_",
+	"/", "_", "\\", "_", "|", "_", "?", "_", "*", "_",
+)
+
 func sanitizeFileName(name string) string {
-	invalid := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
-	for _, c := range invalid {
-		name = strings.ReplaceAll(name, c, "_")
-	}
+	name = invalidReplacer.Replace(name)
 	return strings.Trim(strings.TrimSpace(name), ".")
 }
 
