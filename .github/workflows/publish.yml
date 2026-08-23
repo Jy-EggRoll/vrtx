@@ -90,6 +90,14 @@ jobs:
               shell: pwsh
               run: Expand-Archive -Path "dist/vrtx-windows-amd64.zip" -DestinationPath "stage"
 
+            - name: Download Chinese language file
+              shell: pwsh
+              # 钉在 issrc 的具体 commit 上：该版本内容已验证适配 Inno Setup 6.x；
+              # 升级编译器时随手动 bump 此 SHA
+              run: Invoke-WebRequest `
+                  -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/d588bab7409ebf7e598b24ce91249d64e9c89562/Files/Languages/ChineseSimplified.isl" `
+                  -OutFile "packaging/ChineseSimplified.isl"
+
             - name: Install Inno Setup
               shell: pwsh
               run: choco install innosetup --no-progress -y

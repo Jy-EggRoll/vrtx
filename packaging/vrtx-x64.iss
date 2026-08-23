@@ -26,7 +26,7 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Languages]
-Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinese"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
