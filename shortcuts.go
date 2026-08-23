@@ -232,22 +232,34 @@ func extractDriveShortcuts(shortcutDir string) {
 $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
 $drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell
+
+# 获取所有文件系统驱动器（包含本地卷和网络驱动器）
+$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -match '^[A-Z]:\\$' }
+
 foreach ($drive in $drives) {
-    # 获取卷标
-    $volume = Get-Volume -DriveLetter $drive -ErrorAction SilentlyContinue
+    $letter = $drive.Name
+    $name = $drive.Name
     $label = ""
-    if ($volume) { $label = $volume.FileSystemLabel }
-    
-    # 构建文件名：有卷标则 "C (Label).lnk"，否则 "C.lnk"
-    $name = $drive
-    if ($volume -and $volume.FileSystemLabel) {
-        $name = "$drive ($($volume.FileSystemLabel))"
+
+    # 尝试获取卷标
+    if ($drive.DisplayRoot) {
+        # 网络驱动器：尝试从 Description 获取标签（UNC路径）
+        if ($drive.Description) { $label = $drive.Description }
+    } else {
+        # 本地卷：使用 Get-Volume 获取标签
+        $vol = Get-Volume -DriveLetter $drive.Name -ErrorAction SilentlyContinue
+        if ($vol) { $label = $vol.FileSystemLabel }
     }
+
+    # 构建文件名：有卷标则 "C (Label).lnk"，否则 "C.lnk"
+    $name = $drive.Name
+    if ($label) { $name = "$($drive.Name) ($label)" }
+
     $path = Join-Path $dir ($name + ".lnk")
     if (!(Test-Path $path)) {
         try {
             $s = $wshell.CreateShortcut($path)
-            $s.TargetPath = $drive + ":\"
+            $s.TargetPath = $drive.Root
             $s.Save()
         } catch { }
     }
