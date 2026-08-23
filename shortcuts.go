@@ -230,7 +230,6 @@ func extractDriveShortcuts(shortcutDir string) {
 	before := listLnkNames(targetDir)
 	script := `
 $dir = [Environment]::GetEnvironmentVariable("VRTX_DRIVES_DIR")
-$drives = [Environment]::GetEnvironmentVariable("VRTX_DRIVE_LIST") -split ','
 $wshell = New-Object -ComObject WScript.Shell
 
 # 获取所有文件系统驱动器（包含本地卷和网络驱动器）
@@ -267,7 +266,6 @@ foreach ($drive in $drives) {
 `
 	runPowershell(script,
 		"VRTX_DRIVES_DIR="+targetDir,
-		"VRTX_DRIVE_LIST="+strings.Join(drives, ","),
 	)
 	reportNewLnks("磁盘驱动器", before, listLnkNames(targetDir))
 }
