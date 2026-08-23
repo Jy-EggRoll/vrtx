@@ -34,14 +34,14 @@ const singleInstanceName = `Global\VRTX-SingleInstance`
 // acquireSingleInstance 尝试创建命名互斥体，若已存在说明已有实例在运行，返回 false
 func acquireSingleInstance() bool {
 	_, err := windows.CreateMutex(nil, true, windows.StringToUTF16Ptr(singleInstanceName))
-	if err != nil {
+	if err == nil {
+		return true
+	}
+	if err == windows.ERROR_ALREADY_EXISTS {
 		return false
 	}
-	// 若互斥体已存在，GetLastError 会返回 ERROR_ALREADY_EXISTS
-	if windows.GetLastError() == windows.ERROR_ALREADY_EXISTS {
-		return false
-	}
-	return true
+	// 其他错误（如权限不足）也视为无法获取单实例
+	return false
 }
 
 // runTray 进入系统托盘模式：显示图标与菜单，后台运行提取+监控，直到用户退出。
