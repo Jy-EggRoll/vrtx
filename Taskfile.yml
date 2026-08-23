@@ -103,6 +103,7 @@ tasks:
       - cp build/vrtx-windows-arm64.exe build/pkg/vrtx.exe
       - cd build/pkg && python3 -m zipfile -c ../vrtx-windows-arm64.zip vrtx.exe ahk
       - rm -rf build/pkg
+      - rm -f build/vrtx-windows-*.exe
     generates:
       - build/vrtx-windows-amd64.zip
       - build/vrtx-windows-arm64.zip
