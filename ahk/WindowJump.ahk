@@ -98,7 +98,8 @@ SearchWindows(query) {
 }
 
 ; 搜索 VRTX 指定类别
-SearchVRTXCategory(query, category, label, includeAdmin := true) {
+; adminOnly = false（默认）：只返回普通软件；adminOnly = true：只返回管理员软件
+SearchVRTXCategory(query, category, label, adminOnly := false) {
     global VRTX_BASE
     results := []
     searchLower := StrLower(query)
@@ -117,21 +118,22 @@ SearchVRTXCategory(query, category, label, includeAdmin := true) {
             score := FuzzyScore(searchLower, fullText)
         }
         if (score > 0) {
-            results.Push({
-                score: score,
-                text: label . " " . name,
-                hwnd: fullPath,
-                isShortcut: true,
-                isAdmin: false,
-                iconProcess: ""
-            })
-            if (includeAdmin) {
+            if (adminOnly) {
                 results.Push({
-                    score: score - 1,
+                    score: score,
                     text: "【管理员】" . label . " " . name,
                     hwnd: fullPath,
                     isShortcut: true,
                     isAdmin: true,
+                    iconProcess: ""
+                })
+            } else {
+                results.Push({
+                    score: score,
+                    text: label . " " . name,
+                    hwnd: fullPath,
+                    isShortcut: true,
+                    isAdmin: false,
                     iconProcess: ""
                 })
             }
@@ -214,7 +216,7 @@ WindowJump(pinyinPartialMatch := "") {
     r_phys := 20 * scaleFactor
     WinSetRegion("0-0 w" . w_phys . " h" . h_phys . " r" . r_phys . "-" . r_phys, MyGui.Hwnd)
 
-    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签")
+    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签 | as 管理员")
 
     EditBox := MyGui.Add("Edit", "x20 y45 w560 h22 vSearchInput -E0x200 Background" . ListViewBg)
 
@@ -293,7 +295,7 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
 
     ; 仅当 VRTX 可用时才处理前缀
     if (vrtxAvailable) {
-        prefixMap := Map("b ", "bookmark", "s ", "shortcut")
+        prefixMap := Map("as ", "admin", "b ", "bookmark", "s ", "shortcut")
         for prefix, m in prefixMap {
             if (SubStr(rawInput, 1, StrLen(prefix)) = prefix) {
                 mode := m
@@ -306,15 +308,17 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
     results := []
     if (mode = "window") {
         results := SearchWindows(searchQuery)
-        ; 窗口搜索无结果时，自动进入启动器模式搜索软件快捷方式
+        ; 窗口搜索无结果时，自动进入启动器模式搜索软件快捷方式（不含管理员）
         if (results.Length = 0 && vrtxAvailable) {
             mode := "shortcut"
-            results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel)
+            results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel, false)
         }
     } else if (mode = "bookmark") {
         results := SearchVRTXCategory(searchQuery, "Bookmarks", WindowJumpBookmarkLabel, false)
     } else if (mode = "shortcut") {
-        results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel)
+        results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel, false)
+    } else if (mode = "admin") {
+        results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel, true)
     }
 
     if (results.Length > 0) {
