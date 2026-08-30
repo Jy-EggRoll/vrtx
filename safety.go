@@ -12,7 +12,6 @@ import (
 var managedEntries = map[string]bool{
 	"Bookmarks":   true,
 	"Shortcuts":   true,
-	"VSCode":      true,
 	".vrtx-owned": true,
 }
 

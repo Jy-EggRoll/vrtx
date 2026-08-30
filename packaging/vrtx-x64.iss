@@ -52,7 +52,6 @@ Filename: "{app}\{#AppExeName}"; \
     Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
-; 运行期产生的临时解包文件与配置；自启动开关可能创建的 lnk 一并清理（不存在则静默跳过）
-Type: filesandordirs; Name: "{localappdata}\Temp\vrtx-vscdb-*.tmp"
+; 运行期产生的配置；自启动开关可能创建的 lnk 一并清理（不存在则静默跳过）
 Type: files; Name: "{app}\vrtx.json"
 Type: files; Name: "{userappdata}\Microsoft\Windows\Start Menu\Programs\Startup\VRTX.lnk"

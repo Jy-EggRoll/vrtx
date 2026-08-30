@@ -18,7 +18,6 @@ type watchState struct {
 	prev             ExtractConfig
 	bookmarkModTimes map[string]time.Time
 	shortcutModTimes map[string]time.Time
-	vscodeModTimes   map[string]time.Time
 	lastDrives       []string
 }
 
@@ -57,10 +56,6 @@ func (st *watchState) resetBaselines(cfg *Config) {
 	st.lastDrives = nil
 	if e.Drives {
 		st.lastDrives = getAvailableDrives()
-	}
-	st.vscodeModTimes = nil
-	if e.VSCode {
-		st.vscodeModTimes = statModTimes(getVSCodeDBPaths())
 	}
 }
 
@@ -140,20 +135,6 @@ func syncConfig(st *watchState) {
 		}
 		if e.Drives {
 			st.lastDrives = getAvailableDrives()
-		}
-	}
-
-	if e.VSCode != st.prev.VSCode {
-		if e.VSCode {
-			logInfo("VS Code 提取已启用，正在重建...")
-			rebuildSubdir(st.outDir, "VSCode")
-			extractVSCodeShortcuts(st.outDir)
-		} else {
-			logInfo("VS Code 提取已停用（已有输出保留）")
-		}
-		st.vscodeModTimes = nil
-		if e.VSCode {
-			st.vscodeModTimes = statModTimes(getVSCodeDBPaths())
 		}
 	}
 
@@ -247,28 +228,6 @@ func startWatch(ctx context.Context) {
 				}
 			}
 
-			// VS Code 历史记录检测
-			if e.VSCode && st.vscodeModTimes != nil {
-				var changedDBs []string
-				for _, p := range getVSCodeDBPaths() {
-					fi, err := os.Stat(p)
-					if err != nil {
-						continue
-					}
-					prev, ok := st.vscodeModTimes[p]
-					if !ok || fi.ModTime().After(prev) {
-						st.vscodeModTimes[p] = fi.ModTime()
-						changedDBs = append(changedDBs, p)
-					}
-				}
-				if len(changedDBs) > 0 {
-					logInfo("VS Code 历史记录已变更：%s", strings.Join(changedDBs, "、"))
-					rebuildSubdir(st.outDir, "VSCode")
-					n := extractVSCodeShortcuts(st.outDir)
-					logInfo("VS Code 快捷方式重建完成：新建 %d 个", n)
-				}
-			}
-
 		case <-ctx.Done():
 			logInfo("监控已停止，文件保留在 %s", st.outDir)
 			return
@@ -320,10 +279,6 @@ func runFullExtract(dir string) {
 	if e.Software || e.System || e.Drives || e.Recent || e.Office {
 		logInfo("正在提取快捷方式...")
 		extractShortcuts(dir, e.Software, e.System, e.Drives, e.Recent, e.Office)
-	}
-	if e.VSCode {
-		logInfo("正在提取 VS Code 连接...")
-		extractVSCodeShortcuts(dir)
 	}
 }
 

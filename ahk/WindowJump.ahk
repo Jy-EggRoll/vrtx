@@ -23,7 +23,6 @@ class WindowJumpDebug {
 global WindowJumpPinyinPartialMatch := true
 global WindowJumpShortcutLabel := "【软件】"
 global WindowJumpBookmarkLabel := "【书签】"
-global WindowJumpVSCodeLabel := "【VSCode】"
 
 global VRTX_BASE := A_Temp "\VRTX"
 global WindowJumpPrevActiveHwnd := 0
@@ -99,7 +98,7 @@ SearchWindows(query) {
 }
 
 ; 搜索 VRTX 指定类别
-SearchVRTXCategory(query, category, label) {
+SearchVRTXCategory(query, category, label, includeAdmin := true) {
     global VRTX_BASE
     results := []
     searchLower := StrLower(query)
@@ -126,14 +125,16 @@ SearchVRTXCategory(query, category, label) {
                 isAdmin: false,
                 iconProcess: ""
             })
-            results.Push({
-                score: score - 1,
-                text: "【管理员】" . label . " " . name,
-                hwnd: fullPath,
-                isShortcut: true,
-                isAdmin: true,
-                iconProcess: ""
-            })
+            if (includeAdmin) {
+                results.Push({
+                    score: score - 1,
+                    text: "【管理员】" . label . " " . name,
+                    hwnd: fullPath,
+                    isShortcut: true,
+                    isAdmin: true,
+                    iconProcess: ""
+                })
+            }
         }
     }
     return results
@@ -213,7 +214,7 @@ WindowJump(pinyinPartialMatch := "") {
     r_phys := 20 * scaleFactor
     WinSetRegion("0-0 w" . w_phys . " h" . h_phys . " r" . r_phys . "-" . r_phys, MyGui.Hwnd)
 
-    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签 | v VSCode")
+    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签")
 
     EditBox := MyGui.Add("Edit", "x20 y45 w560 h22 vSearchInput -E0x200 Background" . ListViewBg)
 
@@ -280,7 +281,7 @@ ScheduleSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
 }
 
 UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
-    global WindowJumpShortcutLabel, WindowJumpBookmarkLabel, WindowJumpVSCodeLabel
+    global WindowJumpShortcutLabel, WindowJumpBookmarkLabel
     rawInput := EditObj.Value
     LV.Delete()
 
@@ -292,7 +293,7 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
 
     ; 仅当 VRTX 可用时才处理前缀
     if (vrtxAvailable) {
-        prefixMap := Map("b ", "bookmark", "s ", "shortcut", "v ", "vscode")
+        prefixMap := Map("b ", "bookmark", "s ", "shortcut")
         for prefix, m in prefixMap {
             if (SubStr(rawInput, 1, StrLen(prefix)) = prefix) {
                 mode := m
@@ -305,12 +306,15 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
     results := []
     if (mode = "window") {
         results := SearchWindows(searchQuery)
+        ; 窗口搜索无结果时，自动进入启动器模式搜索软件快捷方式
+        if (results.Length = 0 && vrtxAvailable) {
+            mode := "shortcut"
+            results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel)
+        }
     } else if (mode = "bookmark") {
-        results := SearchVRTXCategory(searchQuery, "Bookmarks", WindowJumpBookmarkLabel)
+        results := SearchVRTXCategory(searchQuery, "Bookmarks", WindowJumpBookmarkLabel, false)
     } else if (mode = "shortcut") {
         results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel)
-    } else if (mode = "vscode") {
-        results := SearchVRTXCategory(searchQuery, "VSCode", WindowJumpVSCodeLabel)
     }
 
     if (results.Length > 0) {

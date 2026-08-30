@@ -25,7 +25,6 @@ type ExtractConfig struct {
 	Drives    bool `json:"drives"`
 	Recent    bool `json:"recent"`
 	Office    bool `json:"office"`
-	VSCode    bool `json:"vscode"`
 }
 
 // Config 是 vrtx 的全部运行时行为配置
@@ -51,7 +50,6 @@ func defaultConfig() *Config {
 			Drives:    true,
 			Recent:    false,
 			Office:    false,
-			VSCode:    true,
 		},
 	}
 }
@@ -154,7 +152,7 @@ func updateConfig(c *Config) error {
 }
 
 // modifiedFields 对比当前值与默认值，返回每个配置项是否被修改过。
-// 键为扁平路径（如 "extract.vscode"），供网页面板渲染修改标记。
+// 键为扁平路径（如 "extract.bookmarks"），供网页面板渲染修改标记。
 func modifiedFields(cur, def *Config) map[string]bool {
 	m := map[string]bool{
 		"output_dir":        cur.OutputDir != def.OutputDir,
@@ -167,7 +165,6 @@ func modifiedFields(cur, def *Config) map[string]bool {
 		"extract.drives":    cur.Extract.Drives != def.Extract.Drives,
 		"extract.recent":    cur.Extract.Recent != def.Extract.Recent,
 		"extract.office":    cur.Extract.Office != def.Extract.Office,
-		"extract.vscode":    cur.Extract.VSCode != def.Extract.VSCode,
 	}
 	return m
 }

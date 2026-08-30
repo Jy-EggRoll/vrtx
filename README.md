@@ -1,12 +1,11 @@
 # VRTX（涡流）
 
-VRTX 是一个 Windows 常驻工具：把散落在系统各处的「入口」——浏览器书签、开始菜单软件、磁盘盘符、VS Code 本地与远程会话——统一提取为 `.url` / `.lnk` 快捷方式，聚合到同一个目录树中，配合 [Everything](https://www.voidtools.com/) 等即时搜索工具实现**全局一键直达**。
+VRTX 是一个 Windows 常驻工具：把散落在系统各处的「入口」——浏览器书签、开始菜单软件、磁盘盘符——统一提取为 `.url` / `.lnk` 快捷方式，聚合到同一个目录树中，配合 [Everything](https://www.voidtools.com/) 等即时搜索工具实现**全局一键直达**。
 
 **核心特性**
 
 - **浏览器书签**：Chrome / Edge 书签递归提取为 `.url` 文件
 - **Windows 快捷方式**：开始菜单、Windows Apps、最近文件、系统位置、全部盘符
-- **VS Code 连接**：本地文件夹、工作区、SSH / WSL 远程会话，一键回到上次的开发环境
 - **网页实时控制台**：SSE 推送日志、级别筛选、Catppuccin 主题自适应深浅色
 - **网页设置面板**：运行时调整行为即刻生效，修改项高亮标记、支持单项重置
 - **系统托盘常驻**：单击开控制台，右键直达设置与清理
@@ -25,9 +24,9 @@ VRTX 是一个 Windows 常驻工具：把散落在系统各处的「入口」—
 
 VRTX 的设计初衷就是做 Everything 的**弹药库**：
 
-- VRTX 把书签、软件、VS Code 会话等一切入口**物化为普通文件**（`.url` / `.lnk`），集中在一个目录树里
+- VRTX 把书签、软件等一切入口**物化为普通文件**（`.url` / `.lnk`），集中在一个目录树里
 - [Everything](https://www.voidtools.com/) 以 NTFS 原生速度索引文件名，输入即出结果
-- 二者结合后：**按下 Everything 热键 → 敲几个字母 → 回车**，就能到达任何一个书签、任何一款软件、任何一台远程开发机上的任意项目——全程不碰浏览器收藏栏、不翻开始菜单、不打开 VS Code 的欢迎页
+- 二者结合后：**按下 Everything 热键 → 敲几个字母 → 回车**，就能到达任何一个书签、任何一款软件——全程不碰浏览器收藏栏、不翻开始菜单
 
 推荐用法：
 
@@ -37,9 +36,7 @@ VRTX 的设计初衷就是做 Everything 的**弹药库**：
    - `github url` → 所有 GitHub 相关书签
    - `ext:lnk starlab` → 所有指向 starlab-linux 远程主机的快捷方式
    - `my-config` → 本地配置仓库与远程同名项目一并命中
-4. 在 Everything 中直接双击结果即可打开对应的书签 / 软件 / VS Code 会话
-
-> 提示：VS Code 远程连接快捷方式依赖本机已安装 VS Code 并配置好对应 SSH / WSL 环境。
+4. 在 Everything 中直接双击结果即可打开对应的书签 / 软件
 
 ## 功能详解
 
@@ -61,22 +58,9 @@ VRTX 的设计初衷就是做 Everything 的**弹药库**：
 | 系统位置 | 回收站 / 此电脑 / 用户目录 / 开机启动 |
 | 磁盘根目录 | 全部可用盘符（`C.lnk`、`D.lnk`…U 盘即插即识别） |
 
-### VS Code 连接
-
-从 VS Code 的 `state.vscdb`（同时支持 Insiders 版）读取最近打开记录，为每个**文件夹**和**工作区**生成快捷方式，双击即以对应的本地 / SSH / WSL 目标重新打开 VS Code：
-
-```
-【远程 · starlab-linux】distributed-and-cloud-computing.lnk   ← SSH 远程项目
-【远程 · Ubuntu-22.04】GitRepo【工作区】.lnk                  ← WSL 工作区
-【本地】vrtx.lnk                                              ← 本地文件夹
-【本地】notes【工作区】.lnk                                   ← 本地工作区
-```
-
-单个文件的打开记录不生成快捷方式。
-
 ### 文件监控
 
-监控模式下按可配置间隔轮询各数据源：书签文件 mtime、快捷方式来源目录、可用盘符集合、VS Code 历史数据库。检测到变更时精确报告触发源并自动重建对应输出。
+监控模式下按可配置间隔轮询各数据源：书签文件 mtime、快捷方式来源目录、可用盘符集合。检测到变更时精确报告触发源并自动重建对应输出。
 
 ## 网页控制台与设置
 
@@ -111,8 +95,7 @@ VRTX 的设计初衷就是做 Everything 的**弹药库**：
     "system": true,
     "drives": true,
     "recent": false,
-    "office": false,
-    "vscode": true
+    "office": false
   }
 }
 ```
@@ -131,19 +114,15 @@ VRTX 的设计初衷就是做 Everything 的**弹药库**：
 ├── Bookmarks\                  # 浏览器书签 (.url)
 │   ├── GitHub-开发-github.com.url
 │   └── ...
-├── Shortcuts\                  # Windows 快捷方式 (.lnk)
-│   ├── StartMenu\
-│   ├── WindowsApps\
-│   ├── Recent\
-│   ├── Office\
-│   ├── System\
-│   └── Drives\
-│       ├── C.lnk
-│       └── ...
-└── VSCode\                     # VS Code 连接 (.lnk)
-    ├── 【远程 · starlab-linux】my-project.lnk
-    ├── 【本地】vrtx.lnk
-    └── ...
+└── Shortcuts\                  # Windows 快捷方式 (.lnk)
+    ├── StartMenu\
+    ├── WindowsApps\
+    ├── Recent\
+    ├── Office\
+    ├── System\
+    └── Drives\
+        ├── C.lnk
+        └── ...
 ```
 
 ## 安全模型
@@ -159,7 +138,7 @@ task build-all
 - 需要 Go 1.26+ 与 [Task](https://taskfile.dev/)；`goversioninfo` 由任务流程调用，用于生成图标、版本信息与 DPI 清单资源（直接 `go build` 得到的 exe 不含这些资源）
 - 无 CGO 依赖，支持交叉编译：发布产物为安装器 `vrtx-setup-x64.exe`（Inno Setup，per-user 安装、中英双语向导）与便携包 `build/vrtx-windows-amd64.zip` / `build/vrtx-windows-arm64.zip`（内含 `vrtx.exe` 与完整 `ahk/` 运行时，解压即用）
 - **ARM64 说明**：ARM64 构建并非全组件原生适配——AutoHotkey 解释器与拼音库等仍为 x64 版本，依赖 Windows 的 x64 转译层运行，可能存在不稳定或未知的问题；请酌情慎重使用，ARM64 设备建议直接使用压缩包（便携）版本
-- 运行依赖：Windows 10+，PowerShell（Windows Apps / 系统位置 / 盘符 / VS Code 快捷方式经由 PowerShell 生成）
+- 运行依赖：Windows 10+，PowerShell（Windows Apps / 系统位置 / 盘符快捷方式经由 PowerShell 生成）
 - 命令行仅支持 `--version` / `-v` 查看版本
 
 ## 许可证
