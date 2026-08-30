@@ -98,5 +98,10 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 			// 立即关闭所有连接（含 SSE 长连接），不等待浏览器断开，否则 Shutdown 会阻塞到网页关闭才返回
 			_ = logServer.Close()
 		}
+		// 退出时清理输出目录，不留任何痕迹
+		dir := current().OutputPath()
+		if err := removeOwnedDir(dir); err != nil {
+			logWarn("退出时清理输出目录失败：%v", err)
+		}
 	})
 }
