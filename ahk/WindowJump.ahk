@@ -655,31 +655,6 @@ MixColor(Color1, Color2, Weight) {
 }
 
 ; 全局特殊热键绑定
-; Alt 双击触发
-global altIsPressed := false
-global lastAltPressTime := 0
-
-~Alt:: {
-    global altIsPressed, lastAltPressTime
-    if (altIsPressed)
-        return
-    altIsPressed := true
-    if (lastAltPressTime
-        && A_TickCount - lastAltPressTime <= 250
-        && InStr(A_PriorKey, "Alt")) {
-        WindowJump()
-        lastAltPressTime := 0
-    } else {
-        lastAltPressTime := A_TickCount
-    }
-}
-
-~Alt Up:: {
-    global altIsPressed
-    altIsPressed := false
-}
-
-; 全局特殊热键绑定
 ; Ctrl 双击触发
 global ctrlIsPressed := false
 global lastCtrlPressTime := 0
@@ -692,7 +667,7 @@ global lastCtrlPressTime := 0
     if (lastCtrlPressTime
         && A_TickCount - lastCtrlPressTime <= 250
         && InStr(A_PriorKey, "Control")) {
-        Send("#!z")
+        WindowJump()
         lastCtrlPressTime := 0
     } else {
         lastCtrlPressTime := A_TickCount
