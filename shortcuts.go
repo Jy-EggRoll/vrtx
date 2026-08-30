@@ -290,7 +290,7 @@ func getAvailableDrives() []string {
 	return drives
 }
 
-// copyLnkFiles 递归遍历 srcDir，将 .lnk 文件按原目录结构复制到 dstDir。
+// copyLnkFiles 递归遍历 srcDir，将 .lnk 文件扁平复制到 dstDir（不保留子目录结构）。
 // 用 getUniquePath 处理同名冲突。返回成功复制的文件数。
 func copyLnkFiles(srcDir, dstDir string) int {
 	copied := 0
@@ -305,12 +305,7 @@ func copyLnkFiles(srcDir, dstDir string) int {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return nil
-		}
-		dst := filepath.Join(dstDir, relPath)
-		os.MkdirAll(filepath.Dir(dst), 0755)
+		dst := filepath.Join(dstDir, d.Name())
 		dst = getUniquePath(dst)
 
 		data, err := os.ReadFile(path)
@@ -322,7 +317,7 @@ func copyLnkFiles(srcDir, dstDir string) int {
 			return nil
 		}
 		copied++
-		logDebug("复制 %s", relPath)
+		logDebug("复制 %s", d.Name())
 		return nil
 	})
 	return copied
