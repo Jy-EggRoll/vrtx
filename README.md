@@ -115,12 +115,11 @@ VRTX 的设计初衷就是做 Everything 的**弹药库**：
 │   ├── GitHub-开发-github.com.url
 │   └── ...
 └── Shortcuts\                  # Windows 快捷方式 (.lnk)
-    ├── StartMenu\
-    ├── WindowsApps\
-    ├── Recent\
-    ├── Office\
-    ├── System\
-    └── Drives\
+    ├── WindowsApps\            # 开始菜单 + Windows Apps 快捷方式
+    ├── Recent\                 # 最近文件
+    ├── Office\                 # Office 最近
+    ├── System\                 # 系统位置
+    └── Drives\                 # 磁盘驱动器
         ├── C.lnk
         └── ...
 ```

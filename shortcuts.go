@@ -41,24 +41,24 @@ func powershellOut(script string, env ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// extractShortcuts 按开关并发启动已启用的提取任务：
+// extractShortcuts 按开关执行已启用的提取任务：
 //
-//	software → StartMenu/ + WindowsApps/
+//	software → 先 StartMenu → 后 WindowsApps（去重）
 //	recent   → Recent/    office → Office/
 //	system   → System/    drives → Drives/
 //
-// 各任务独立并行，全部完成后返回
+// 开始菜单先执行，Windows Apps 后执行（检查是否已存在），其他任务可并行
 func extractShortcuts(outputDir string, software, system, drives, recent, office bool) {
 	shortcutDir := filepath.Join(outputDir, "Shortcuts")
 	os.MkdirAll(shortcutDir, 0755)
 
-	var tasks []func()
+	// 先执行开始菜单提取（基础的）
 	if software {
-		tasks = append(tasks,
-			func() { extractStartMenuShortcuts(shortcutDir) },
-			func() { extractWindowsAppsShortcuts(shortcutDir) },
-		)
+		extractStartMenuShortcuts(shortcutDir)
 	}
+
+	// 再执行其他提取任务（可并行）
+	var tasks []func()
 	if recent {
 		tasks = append(tasks, func() { extractRecentShortcuts(shortcutDir) })
 	}
@@ -72,6 +72,11 @@ func extractShortcuts(outputDir string, software, system, drives, recent, office
 		tasks = append(tasks, func() { extractDriveShortcuts(shortcutDir) })
 	}
 	runConcurrent(tasks...)
+
+	// 最后执行 Windows Apps 提取（检查是否已存在）
+	if software {
+		extractWindowsAppsShortcuts(shortcutDir)
+	}
 }
 
 // startMenuDirs 返回开始菜单 Programs 目录（用户态 + 机器态），多处复用
@@ -87,7 +92,7 @@ func startMenuDirs() []string {
 }
 
 func extractStartMenuShortcuts(shortcutDir string) {
-	targetDir := filepath.Join(shortcutDir, "StartMenu")
+	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
 
 	total := 0
@@ -137,6 +142,7 @@ func reportNewLnks(label string, before, after map[string]struct{}) int {
 // 使用 PowerShell 创建 .lnk 快捷方式。
 // 之所以不走文件系统，是因为 Windows Apps 不在常规磁盘路径中，
 // 只能通过 Shell.Application COM 接口枚举。
+// 去重检查：如果目录中已存在同名 .lnk 文件则跳过（借鉴 MyKeymap 的算法）。
 func extractWindowsAppsShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "WindowsApps")
 	os.MkdirAll(targetDir, 0755)
