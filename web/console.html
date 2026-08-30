@@ -83,7 +83,6 @@
         --sem-error: var(--ctp-red); /* 错误 */
         --sem-fatal: var(--ctp-maroon); /* 致命（比 error 更深） */
         --sem-success: var(--ctp-green); /* 预留：成功 */
-        --sem-debug: var(--ctp-sapphire); /* 预留：调试 */
 
         /* UI 中性色 → catppuccin 中性色 */
         --text: var(--ctp-text);
@@ -293,10 +292,6 @@
         background: color-mix(in srgb, var(--sem-fatal) 15%, transparent);
         color: var(--sem-fatal);
         font-weight: 700;
-      }
-      .log-level.debug {
-        background: color-mix(in srgb, var(--sem-debug) 15%, transparent);
-        color: var(--sem-debug);
       }
 
       .log-msg {
@@ -520,8 +515,7 @@
         <div class="log-header">
           <span>日志流</span>
           <div class="filters" id="filters">
-            <button class="chip active" data-min="all" type="button">全部</button>
-            <button class="chip" data-min="info" type="button">INFO+</button>
+            <button class="chip active" data-min="info" type="button">INFO+</button>
             <button class="chip" data-min="warn" type="button">WARN+</button>
           </div>
           <span class="count" id="entry-count">0 条</span>
@@ -650,8 +644,8 @@
         var entryCount = 0;
 
         /* 级别严重度排序，数值越大越严重；低于 minRank 的条目被隐藏 */
-        var RANK = { debug: 0, info: 1, warn: 2, error: 3, fatal: 3 };
-        var minRank = 0;
+        var RANK = { info: 1, warn: 2, error: 3, fatal: 3 };
+        var minRank = 1;
 
         function rankOf(level) {
           return RANK[level] !== undefined ? RANK[level] : 1;
@@ -738,7 +732,7 @@
             for (var i = 0; i < chips.length; i++) {
               chips[i].classList.toggle("active", chips[i] === btn);
             }
-            minRank = btn.dataset.min === "all" ? 0 : rankOf(btn.dataset.min);
+            minRank = rankOf(btn.dataset.min);
             applyFilter();
           });
         }

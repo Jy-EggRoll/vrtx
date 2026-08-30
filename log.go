@@ -7,17 +7,6 @@ import (
 	"time"
 )
 
-// ANSI escape code 用于终端彩色输出。
-// Windows 下需 Windows Terminal / ConEmu 等支持 ANSI 的终端模拟器；GUI 构建无控制台时静默丢弃。
-const (
-	reset  = "\033[0m"
-	bold   = "\033[1m"
-	red    = "\033[31m"
-	green  = "\033[32m"
-	yellow = "\033[33m"
-	gray   = "\033[90m"
-)
-
 // logLevel 是日志级别，网页控制台据此为每条日志着色
 type logLevel string
 
@@ -89,28 +78,22 @@ func (r *logRing) subscribe() (chan logEntry, func()) {
 	return ch, unsub
 }
 
-// ring 是全局日志缓冲，网页控制台读取它；容量 4096 条，满了就砍最旧，不会溢出
-var ring = newLogRing(4096)
+// ring 是全局日志缓冲，网页控制台读取它；容量 1000 条，满了就砍最旧，不会溢出
+var ring = newLogRing(1000)
 
-// logWriter 把日志写入内存环形缓冲（供网页控制台），并以 ANSI 彩色文本写到控制台（若存在）
-func logWriter(level logLevel, color, format string, v ...any) {
-	msg := fmt.Sprintf(format, v...)
-	ring.append(logEntry{Level: level, Time: time.Now(), Msg: msg})
-	// GUI 构建下无控制台，fmt.Fprintf 到 os.Stdout 会静默丢弃，不报错
-	fmt.Fprintf(os.Stdout, "%s%s%s %s%s%s\n", gray, time.Now().Format("15:04:05"), reset, color, msg, reset)
+// logWriter 把日志写入内存环形缓冲（供网页控制台）
+func logWriter(level logLevel, format string, v ...any) {
+	ring.append(logEntry{Level: level, Time: time.Now(), Msg: fmt.Sprintf(format, v...)})
 }
 
-func logInfo(format string, v ...any) { logWriter(levelInfo, green, format, v...) }
+func logInfo(format string, v ...any)  { logWriter(levelInfo, format, v...) }
+func logWarn(format string, v ...any)  { logWriter(levelWarn, format, v...) }
+func logError(format string, v ...any) { logWriter(levelError, format, v...) }
 
-func logWarn(format string, v ...any) { logWriter(levelWarn, yellow, format, v...) }
-
-func logError(format string, v ...any) { logWriter(levelError, red, format, v...) }
-
-// logDebug 输出细节级日志（逐文件动作等），无条件写入环形缓冲，
-// 由网页控制台按级别筛选显示；终端下以灰色弱化输出
-func logDebug(format string, v ...any) { logWriter(levelDebug, gray, format, v...) }
+// logDebug 已废弃：不再写入环形缓冲，调用点保留以备将来恢复
+func logDebug(format string, v ...any) {}
 
 func logFatal(format string, v ...any) {
-	logWriter(levelFatal, bold+red, format, v...)
+	logWriter(levelFatal, format, v...)
 	os.Exit(1)
 }
