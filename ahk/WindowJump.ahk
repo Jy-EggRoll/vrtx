@@ -514,8 +514,11 @@ FuzzyScore(query, target) {
             if InStr(target, token, true, 1, 1) {
                 tokenScore += 200
             }
-        } else if IbPinyin_Match(token, target, pinyinFlags) {
+        } else if IbPinyin_FindMatch(token, target, &start, &end, pinyinFlags) {
             tokenScore := 800
+            if (start == 1) {
+                tokenScore += 200
+            }
         }
         if (tokenScore > 0) {
             totalScore += tokenScore
