@@ -529,7 +529,7 @@ FuzzyScore(query, target) {
         return 0
     }
     ; target 越短加分越高（精确匹配 > 模糊匹配）
-    totalScore += Round(query.Length / target.Length * 100)
+    totalScore += Round(StrLen(query) / StrLen(target) * 100)
     return totalScore
 }
 
