@@ -303,6 +303,17 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
                 break
             }
         }
+        ; 后缀模式：支持 "feishu b"、"steam s" 等写法
+        if (mode = "window") {
+            suffixMap := Map(" as", "admin", " b", "bookmark", " s", "shortcut")
+            for suffix, m in suffixMap {
+                if (SubStr(rawInput, -StrLen(suffix)) = suffix) {
+                    mode := m
+                    searchQuery := Trim(SubStr(rawInput, 1, StrLen(rawInput) - StrLen(suffix)))
+                    break
+                }
+            }
+        }
     }
 
     results := []
