@@ -528,6 +528,8 @@ FuzzyScore(query, target) {
     if (matchedTokens < tokens.Length) {
         return 0
     }
+    ; target 越短加分越高（精确匹配 > 模糊匹配）
+    totalScore += Round(query.Length / target.Length * 100)
     return totalScore
 }
 
