@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	_ "embed"
+	"os"
+	"os/exec"
 
 	"github.com/lutischan-ferenc/systray"
 	"golang.org/x/sys/windows"
@@ -31,10 +33,14 @@ func setDPIAware() {
 // singleInstanceName 是跨实例互斥体名称，避免双击 exe 多次产生多个托盘图标
 const singleInstanceName = `Global\VRTX-SingleInstance`
 
+// singleInstanceHandle 保存互斥体句柄，供重启时手动释放
+var singleInstanceHandle uintptr
+
 // acquireSingleInstance 尝试创建命名互斥体，若已存在说明已有实例在运行，返回 false
 func acquireSingleInstance() bool {
-	_, err := windows.CreateMutex(nil, true, windows.StringToUTF16Ptr(singleInstanceName))
+	h, err := windows.CreateMutex(nil, true, windows.StringToUTF16Ptr(singleInstanceName))
 	if err == nil {
+		singleInstanceHandle = uintptr(h)
 		return true
 	}
 	if err == windows.ERROR_ALREADY_EXISTS {
@@ -42,6 +48,31 @@ func acquireSingleInstance() bool {
 	}
 	// 其他错误（如权限不足）也视为无法获取单实例
 	return false
+}
+
+// releaseSingleInstance 手动释放互斥体，使新实例可以获取所有权
+func releaseSingleInstance() {
+	if singleInstanceHandle != 0 {
+		windows.CloseHandle(windows.Handle(singleInstanceHandle))
+		singleInstanceHandle = 0
+	}
+}
+
+// restart 退出当前进程并启动新实例，实现托盘菜单的重启功能
+func restart() {
+	exe, err := os.Executable()
+	if err != nil {
+		logWarn("无法获取可执行文件路径：%v", err)
+		return
+	}
+	cmd := exec.Command(exe)
+	hideWindow(cmd)
+	if err := cmd.Start(); err != nil {
+		logWarn("无法启动新实例：%v", err)
+		return
+	}
+	releaseSingleInstance()
+	systray.Quit()
 }
 
 // runTray 进入系统托盘模式：显示图标与菜单，后台运行提取+监控，直到用户退出。
@@ -55,16 +86,18 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		mConsole := systray.AddMenuItem("打开控制台", "在浏览器中查看实时日志")
 		mSettings := systray.AddMenuItem("打开设置", "在浏览器中调整运行行为")
 		mAuto := systray.AddMenuItemCheckbox("开机自动启动", "在系统启动时自动运行 VRTX", autostartFileExists())
+		mRestart := systray.AddMenuItem("重启", "退出并重新启动 VRTX")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "退出 VRTX")
 
 		// 单击托盘图标即打开网页控制台（按用户习惯：单击开控制台）
 		systray.SetOnClick(func(menu systray.IMenu) { openConsole("") })
 
-		// 菜单点击事件：控制台 / 设置 / 自启开关 / 退出
+		// 菜单点击事件：控制台 / 设置 / 自启开关 / 重启 / 退出
 		mConsole.Click(func() { openConsole("") })
 		mSettings.Click(func() { openConsole("#settings") })
 		mAuto.Click(func() { toggleAutoStart(mAuto) })
+		mRestart.Click(func() { restart() })
 		mQuit.Click(func() { systray.Quit() })
 
 		// 异步精化视觉状态：快速 Stat 只能判断"文件存在"，
