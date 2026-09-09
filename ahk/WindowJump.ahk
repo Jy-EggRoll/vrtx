@@ -319,10 +319,14 @@ UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
     results := []
     if (mode = "window") {
         results := SearchWindows(searchQuery)
-        ; 窗口搜索无结果时，自动进入启动器模式搜索软件快捷方式（不含管理员）
+        ; 窗口搜索无结果时，自动进入启动器模式搜索软件+书签（不含管理员）
         if (results.Length = 0 && vrtxAvailable) {
-            mode := "shortcut"
-            results := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel, false)
+            softwareResults := SearchVRTXCategory(searchQuery, "Shortcuts", WindowJumpShortcutLabel, false)
+            bookmarkResults := SearchVRTXCategory(searchQuery, "Bookmarks", WindowJumpBookmarkLabel, false)
+            for _, r in softwareResults
+                results.Push(r)
+            for _, r in bookmarkResults
+                results.Push(r)
         }
     } else if (mode = "bookmark") {
         results := SearchVRTXCategory(searchQuery, "Bookmarks", WindowJumpBookmarkLabel, false)
