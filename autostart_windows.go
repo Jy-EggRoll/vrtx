@@ -11,13 +11,12 @@ import (
 	"github.com/lutischan-ferenc/systray"
 )
 
-// taskName 是任务计划程序中 VRTX 任务的文件夹名称
-const taskFolder = `\VRTX`
-const taskName = `VRTX`
+// taskName 是任务计划程序中 VRTX 任务的名称
+const taskName = "VRTX"
 
 // autostartFileExists 快速判断自启任务是否存在（仅供菜单初始视觉使用）
 func autostartFileExists() bool {
-	cmd := exec.Command("schtasks", "/query", "/TN", taskFolder+"\\"+taskName, "/FO", "LIST", "/V")
+	cmd := exec.Command("schtasks", "/query", "/TN", taskName, "/FO", "LIST", "/V")
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	return err == nil && strings.Contains(string(out), taskName)
@@ -53,7 +52,7 @@ const (
 
 // detectAutoStart 检测 VRTX 自启动任务是否存在
 func detectAutoStart() autostartState {
-	cmd := exec.Command("schtasks", "/query", "/TN", taskFolder+"\\"+taskName, "/FO", "LIST", "/V")
+	cmd := exec.Command("schtasks", "/query", "/TN", taskName, "/FO", "LIST", "/V")
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -71,7 +70,7 @@ func enableAutoStart() error {
 	if err != nil {
 		return fmt.Errorf("定位自身可执行文件失败: %w", err)
 	}
-	cmd := exec.Command("schtasks", "/create", "/TN", taskFolder+"\\"+taskName, "/TR", exe, "/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:03", "/F")
+	cmd := exec.Command("schtasks", "/create", "/TN", taskName, "/TR", exe, "/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:03", "/F")
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -82,7 +81,7 @@ func enableAutoStart() error {
 
 // disableAutoStart 删除自启动任务（不存在视为成功）
 func disableAutoStart() error {
-	cmd := exec.Command("schtasks", "/delete", "/TN", taskFolder+"\\"+taskName, "/F")
+	cmd := exec.Command("schtasks", "/delete", "/TN", taskName, "/F")
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
