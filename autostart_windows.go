@@ -18,6 +18,7 @@ const taskName = `VRTX`
 // autostartFileExists 快速判断自启任务是否存在（仅供菜单初始视觉使用）
 func autostartFileExists() bool {
 	cmd := exec.Command("schtasks", "/query", "/TN", taskFolder+"\\"+taskName, "/FO", "LIST", "/V")
+	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	return err == nil && strings.Contains(string(out), taskName)
 }
@@ -53,6 +54,7 @@ const (
 // detectAutoStart 检测 VRTX 自启动任务是否存在
 func detectAutoStart() autostartState {
 	cmd := exec.Command("schtasks", "/query", "/TN", taskFolder+"\\"+taskName, "/FO", "LIST", "/V")
+	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return autostartOff
@@ -70,6 +72,7 @@ func enableAutoStart() error {
 		return fmt.Errorf("定位自身可执行文件失败: %w", err)
 	}
 	cmd := exec.Command("schtasks", "/create", "/TN", taskFolder+"\\"+taskName, "/TR", exe, "/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:03", "/F")
+	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("创建自启动任务失败: %v\n%s", err, string(out))
@@ -80,6 +83,7 @@ func enableAutoStart() error {
 // disableAutoStart 删除自启动任务（不存在视为成功）
 func disableAutoStart() error {
 	cmd := exec.Command("schtasks", "/delete", "/TN", taskFolder+"\\"+taskName, "/F")
+	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("删除自启动任务失败: %v\n%s", err, string(out))
