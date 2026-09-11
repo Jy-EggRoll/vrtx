@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 	"unsafe"
 
 	"github.com/lutischan-ferenc/systray"
@@ -88,20 +89,22 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		mConsole := systray.AddMenuItem("打开控制台", "在浏览器中查看实时日志")
 		mSettings := systray.AddMenuItem("打开设置", "在浏览器中调整运行行为")
 		mAuto := systray.AddMenuItemCheckbox("开机自动启动", "在系统启动时自动运行 VRTX", autostartFileExists())
-		mRestart := systray.AddMenuItem("重启", "退出并重新启动 VRTX")
-		mRestartAdmin := systray.AddMenuItem("以管理员身份重启", "以管理员权限退出并重新启动 VRTX")
+		mRestartAdmin := systray.AddMenuItemCheckbox("以管理员身份运行", "以管理员权限运行 VRTX", isAdmin())
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "退出 VRTX")
 
 		// 单击托盘图标即打开网页控制台（按用户习惯：单击开控制台）
 		systray.SetOnClick(func(menu systray.IMenu) { openConsole("") })
 
-		// 菜单点击事件：控制台 / 设置 / 自启开关 / 重启 / 管理员重启 / 退出
+		// 菜单点击事件：控制台 / 设置 / 自启开关 / 管理员运行 / 退出
 		mConsole.Click(func() { openConsole("") })
 		mSettings.Click(func() { openConsole("#settings") })
 		mAuto.Click(func() { toggleAutoStart(mAuto) })
-		mRestart.Click(func() { restart() })
-		mRestartAdmin.Click(func() { restartAsAdmin() })
+		mRestartAdmin.Click(func() {
+			if !isAdmin() {
+				restartAsAdmin()
+			}
+		})
 		mQuit.Click(func() { systray.Quit() })
 
 		// 异步精化视觉状态：快速 Stat 只能判断"文件存在"，
@@ -109,6 +112,18 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		go func() {
 			if detectAutoStart() != autostartOn {
 				mAuto.Uncheck()
+			}
+		}()
+
+		// 异步更新管理员状态对勾
+		go func() {
+			for {
+				if isAdmin() {
+					mRestartAdmin.Check()
+				} else {
+					mRestartAdmin.Uncheck()
+				}
+				time.Sleep(1 * time.Second)
 			}
 		}()
 
@@ -141,6 +156,24 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 			logWarn("退出时清理输出目录失败：%v", err)
 		}
 	})
+}
+
+// isAdmin 检测当前进程是否以管理员身份运行
+func isAdmin() bool {
+	var token windows.Token
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token)
+	if err != nil {
+		return false
+	}
+	defer token.Close()
+	var elevation uint32
+	var size uint32
+	err = windows.GetTokenInformation(token, windows.TokenElevation,
+		(*byte)(unsafe.Pointer(&elevation)), uint32(unsafe.Sizeof(elevation)), &size)
+	if err != nil {
+		return false
+	}
+	return elevation != 0
 }
 
 // restartAsAdmin 以管理员身份重启 VRTX
