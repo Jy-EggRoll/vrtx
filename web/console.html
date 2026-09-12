@@ -598,13 +598,6 @@
             </label>
           </fieldset>
 
-          <div class="field row wide">
-            <span class="lab">输出目录（留空使用默认临时目录）</span>
-            <input type="text" data-key="output_dir" placeholder="%TEMP%\VRTX" spellcheck="false">
-            <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
-          </div>
-          <p class="hint">目录必须为空或仅含 VRTX 生成的内容；含其他文件的目录会被拒绝，绝不误删。</p>
-
           <div class="actions">
             <button id="btn-save" class="primary" type="button">保存并生效</button>
             <button id="btn-restore" type="button">恢复默认</button>
@@ -741,7 +734,7 @@
         var KEYS = [
           "extract.bookmarks", "extract.software", "extract.system",
           "extract.drives", "extract.recent", "extract.office",
-          "watch", "ahk", "interval_seconds", "output_dir"
+          "watch", "ahk", "interval_seconds"
         ];
         var viewLog = document.getElementById("view-log");
         var viewSettings = document.getElementById("view-settings");
