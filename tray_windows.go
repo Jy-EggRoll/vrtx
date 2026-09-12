@@ -130,8 +130,8 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		// 后台执行首次提取并进入监控循环，避免阻塞托盘消息循环；
 		// 提取范围与监控行为均实时读取配置快照
 		go func() {
-			runFullExtract(current().OutputPath())
-			logInfo("首次提取完成，进入监控模式（输出目录：%s）", current().OutputPath())
+			runFullExtract(getOutputDir())
+			logInfo("首次提取完成，进入监控模式（输出目录：%s）", getOutputDir())
 
 			if current().AHK {
 				if err := launchAHK(); err != nil {
@@ -151,8 +151,7 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 			_ = logServer.Close()
 		}
 		// 退出时清理输出目录，不留任何痕迹
-		dir := current().OutputPath()
-		if err := removeOwnedDir(dir); err != nil {
+		if err := os.RemoveAll(getOutputDir()); err != nil {
 			logWarn("退出时清理输出目录失败：%v", err)
 		}
 	})

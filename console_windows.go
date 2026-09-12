@@ -74,7 +74,7 @@ func startLogServer() (string, error) {
 	})
 	// 配置读取/修改：GET 返回三件套（当前值/默认值/修改标记），POST 校验后热生效并落盘
 	mux.HandleFunc("/api/config", apiConfigHandler)
-	// 清理输出：清空输出目录并按当前配置立即重建（内部走所有权守卫）
+	// 清理输出：清空输出目录并按当前配置立即重建
 	mux.HandleFunc("/api/clean", apiCleanHandler)
 	// 未知 API 路径返回 404 JSON，绝不落进 "/" 的 HTML 兜底——
 	// 否则前端会把页面当配置解析，一切失败都无声无息
@@ -93,7 +93,7 @@ func startLogServer() (string, error) {
 }
 
 // apiConfigHandler 提供配置的读取与修改。
-// POST 时服务端统一校验（含输出目录写入侧准入），不合规直接拒绝且不落盘不生效。
+// POST 时服务端直接落盘并热生效。
 func apiConfigHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -120,10 +120,6 @@ func apiConfigHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		nc.sanitize()
-		if err := ensureOwnedDir(nc.OutputPath()); err != nil {
-			http.Error(w, "输出目录不可用："+err.Error(), http.StatusBadRequest)
-			return
-		}
 		updateConfig(&nc)
 		writeJSON(w, map[string]any{"ok": true})
 	default:
@@ -132,7 +128,7 @@ func apiConfigHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// apiCleanHandler 触发「清理并重建」；实际清理走所有权守卫，失败会记入日志流
+// apiCleanHandler 触发「清理并重建」。
 func apiCleanHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")

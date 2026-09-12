@@ -29,7 +29,6 @@ type ExtractConfig struct {
 
 // Config 是 vrtx 的全部运行时行为配置
 type Config struct {
-	OutputDir       string        `json:"output_dir"`       // 空 = 默认 %TEMP%\VRTX
 	IntervalSeconds int           `json:"interval_seconds"` // 监控轮询间隔
 	Watch           bool          `json:"watch"`            // 监控模式总开关
 	AHK             bool          `json:"ahk"`              // 启动时经 UAC 以管理员权限拉起 AutoHotkey 脚本
@@ -39,7 +38,6 @@ type Config struct {
 // defaultConfig 唯一事实源：首次启动、恢复默认、损坏兜底都从这里取值
 func defaultConfig() *Config {
 	return &Config{
-		OutputDir:       "",
 		IntervalSeconds: 1,
 		Watch:           true,
 		AHK:             true,
@@ -67,14 +65,6 @@ func (c *Config) sanitize() {
 // Interval 返回轮询间隔时长
 func (c *Config) Interval() time.Duration {
 	return time.Duration(c.IntervalSeconds) * time.Second
-}
-
-// OutputPath 解析实际输出目录（未配置时回退默认临时目录）
-func (c *Config) OutputPath() string {
-	if c.OutputDir == "" {
-		return getOutputDir()
-	}
-	return c.OutputDir
 }
 
 var (
@@ -155,7 +145,6 @@ func updateConfig(c *Config) error {
 // 键为扁平路径（如 "extract.bookmarks"），供网页面板渲染修改标记。
 func modifiedFields(cur, def *Config) map[string]bool {
 	m := map[string]bool{
-		"output_dir":        cur.OutputDir != def.OutputDir,
 		"interval_seconds":  cur.IntervalSeconds != def.IntervalSeconds,
 		"watch":             cur.Watch != def.Watch,
 		"ahk":               cur.AHK != def.AHK,

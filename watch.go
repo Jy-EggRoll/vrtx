@@ -10,10 +10,9 @@ import (
 	"time"
 )
 
-// watchState 汇集监控循环的可变内部状态；输出目录热切换时整体重建。
+// watchState 汇集监控循环的可变内部状态。
 type watchState struct {
 	interval         time.Duration
-	outDir           string
 	ticker           *time.Ticker
 	prev             ExtractConfig
 	bookmarkModTimes map[string]time.Time
@@ -24,7 +23,6 @@ type watchState struct {
 func newWatchState(cfg *Config) *watchState {
 	st := &watchState{
 		interval: cfg.Interval(),
-		outDir:   cfg.OutputPath(),
 		prev:     cfg.Extract,
 	}
 	st.ticker = time.NewTicker(st.interval)
@@ -71,7 +69,7 @@ func statModTimes(paths []string) map[string]time.Time {
 }
 
 // syncConfig 对比当前配置快照与监控状态，应用可热更的变更：
-// 轮询间隔调整、输出目录迁移、类别启停（均由网页面板保存触发）。
+// 轮询间隔调整、类别启停（均由网页面板保存触发）。
 // 运行中直接修改 vrtx.json 不会被感知——文件仅在启动时加载一次。
 func syncConfig(st *watchState) {
 	cfg := current()
@@ -84,32 +82,13 @@ func syncConfig(st *watchState) {
 		logInfo("轮询间隔已调整为 %v", d)
 	}
 
-	// 输出目录热切换：旧目录凭所有权删除（删不动则原样保留），新目录准入后迁移
-	if np := cfg.OutputPath(); np != st.outDir {
-		old := st.outDir
-		st.outDir = np
-		logInfo("输出目录切换：%s → %s，正在迁移...", old, np)
-		if err := removeOwnedDir(old); err != nil {
-			logError("旧输出目录未删除（原样保留）：%v", err)
-		}
-		if err := os.MkdirAll(np, 0755); err != nil {
-			logError("创建新输出目录失败：%v", err)
-			return
-		}
-		runFullExtract(np)
-		st.resetBaselines(cfg)
-		logInfo("输出目录迁移完成")
-		st.prev = e
-		return
-	}
-
 	// 类别启停：启用→清掉对应子目录重建（避免与既有文件叠加产生 _1 副本）；
 	// 停用→跳过监控但保留已生成输出
 	if e.Bookmarks != st.prev.Bookmarks {
 		if e.Bookmarks {
 			logInfo("书签提取已启用，正在重建...")
-			rebuildSubdir(st.outDir, "Bookmarks")
-			extractBookmarks(st.outDir)
+			rebuildSubdir(getOutputDir(), "Bookmarks")
+			extractBookmarks(getOutputDir())
 		} else {
 			logInfo("书签提取已停用（已有输出保留）")
 		}
@@ -123,8 +102,8 @@ func syncConfig(st *watchState) {
 		on := e.Software || e.System || e.Drives || e.Recent || e.Office
 		if on {
 			logInfo("快捷方式提取配置已变更，正在重建...")
-			rebuildSubdir(st.outDir, "Shortcuts")
-			extractShortcuts(st.outDir, e.Software, e.System, e.Drives, e.Recent, e.Office)
+			rebuildSubdir(getOutputDir(), "Shortcuts")
+			extractShortcuts(getOutputDir(), e.Software, e.System, e.Drives, e.Recent, e.Office)
 		} else {
 			logInfo("快捷方式提取已停用（已有输出保留）")
 		}
@@ -141,7 +120,7 @@ func syncConfig(st *watchState) {
 	st.prev = e
 }
 
-// rebuildSubdir 清空输出目录下的管理子目录；根已通过所有权校验，子树天然可删
+// rebuildSubdir 清空输出目录下的管理子目录。
 func rebuildSubdir(outDir, name string) {
 	os.RemoveAll(filepath.Join(outDir, name))
 }
@@ -184,8 +163,8 @@ func startWatch(ctx context.Context) {
 				}
 				if len(changedFiles) > 0 {
 					logInfo("书签文件已变更：%s", strings.Join(changedFiles, "、"))
-					rebuildSubdir(st.outDir, "Bookmarks")
-					n := extractBookmarks(st.outDir)
+					rebuildSubdir(getOutputDir(), "Bookmarks")
+					n := extractBookmarks(getOutputDir())
 					logInfo("书签重建完成：共 %d 个 .url", n)
 				}
 			}
@@ -222,14 +201,14 @@ func startWatch(ctx context.Context) {
 						logInfo("盘符变化：新增 %s，移除 %s",
 							driveDisplay(addedDrives), driveDisplay(removedDrives))
 					}
-					rebuildSubdir(st.outDir, "Shortcuts")
-					extractShortcuts(st.outDir, e.Software, e.System, e.Drives, e.Recent, e.Office)
+					rebuildSubdir(getOutputDir(), "Shortcuts")
+					extractShortcuts(getOutputDir(), e.Software, e.System, e.Drives, e.Recent, e.Office)
 					logInfo("快捷方式重建完成")
 				}
 			}
 
 		case <-ctx.Done():
-			logInfo("监控已停止，文件保留在 %s", st.outDir)
+			logInfo("监控已停止，文件保留在 %s", getOutputDir())
 			return
 		}
 	}
@@ -269,7 +248,7 @@ func driveDisplay(drives []string) string {
 	return strings.Join(out, "、")
 }
 
-// runFullExtract 按当前配置执行全部启用的提取任务（首次启动/目录迁移共用）
+// runFullExtract 按当前配置执行全部启用的提取任务。
 func runFullExtract(dir string) {
 	e := current().Extract
 	if e.Bookmarks {
@@ -282,12 +261,11 @@ func runFullExtract(dir string) {
 	}
 }
 
-// cleanAndRebuild 清空当前输出目录并按当前配置立即重建。
-// 目录含非 VRTX 内容时拒绝清理（底线守卫），不做半吊子重建。
+// cleanAndRebuild 清空输出目录并按当前配置立即重建。
 func cleanAndRebuild() {
-	dir := current().OutputPath()
+	dir := getOutputDir()
 	logInfo("正在清理输出目录：%s", dir)
-	if err := removeOwnedDir(dir); err != nil {
+	if err := os.RemoveAll(dir); err != nil {
 		logError("清理失败，已中止：%v", err)
 		return
 	}

@@ -11,7 +11,7 @@ import (
 // main 是程序入口，执行流程：
 //  1. --version/-v 打印版本后退出
 //  2. 加载 exe 同目录的 vrtx.json（不存在则生成默认配置）
-//  3. 清空并重建输出目录
+//  3. 清空并重建输出目录（固定为 %TEMP%\VRTX）
 //  4. 进入托盘模式：按配置执行提取与监控，行为变更全部通过网页设置面板或配置文件完成
 func main() {
 	// 在其余逻辑前优先处理 --version / -v，打印版本与构建时间后直接退出，
@@ -31,15 +31,10 @@ func main() {
 	// 加载配置：唯一的行为控制来源（替代原命令行参数）
 	initConfig()
 
-	outputDir := current().OutputPath()
+	outputDir := getOutputDir()
 
-	// 写入侧底线：配置的输出目录必须为空/不存在/纯 VRTX 内容，否则拒绝启动
-	if err := ensureOwnedDir(outputDir); err != nil {
-		logFatal("输出目录不可用：%s\n%v\n请更换 output_dir 配置，或手动清理该目录后重试。", outputDir, err)
-	}
-
-	// 每次启动先清空输出目录（凭所有权校验），避免残留文件干扰增量结果
-	if err := removeOwnedDir(outputDir); err != nil {
+	// 每次启动先清空输出目录，避免残留文件干扰增量结果
+	if err := os.RemoveAll(outputDir); err != nil {
 		logFatal("无法清理输出目录：%v", err)
 	}
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -65,7 +60,7 @@ func main() {
 }
 
 // getOutputDir 按 TEMP → TMP → AppData\Local\Temp 优先级 fallback 获取临时目录，
-// 并在其下追加 VRTX 子目录作为默认输出路径。
+// 并在其下追加 VRTX 子目录作为输出路径。始终使用临时目录，不支持用户自定义。
 func getOutputDir() string {
 	tempDir := os.Getenv("TEMP")
 	if tempDir == "" {
