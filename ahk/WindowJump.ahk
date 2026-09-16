@@ -34,7 +34,7 @@ ScoreCfg := {
     Pinyin: 800,
     PinyinStart: 200,
     TargetLenFactor: 100,
-    CatWeight: { Shortcuts: 500, Bookmarks: 0 },
+    CatWeight: Map("Shortcuts", 500, "Bookmarks", 0),
 }
 
 UpdateTheme()
@@ -128,7 +128,8 @@ SearchVRTXCategory(query, category, label, adminOnly := false) {
             score := FuzzyScore(searchLower, fullText)
         }
         if (score > 0) {
-            score += ScoreCfg.CatWeight[category]
+            catWeight := ScoreCfg.CatWeight
+            score += catWeight[category]
             if (adminOnly) {
                 results.Push({
                     score: score,
