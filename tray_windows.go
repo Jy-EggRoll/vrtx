@@ -86,16 +86,18 @@ func runTray(ctx context.Context, cancel context.CancelFunc) {
 		mConsole := systray.AddMenuItem("打开控制台", "在浏览器中查看实时日志")
 		mSettings := systray.AddMenuItem("打开设置", "在浏览器中调整运行行为")
 		mAuto := systray.AddMenuItemCheckbox("开机自动启动", "在系统启动时自动运行 VRTX", autostartFileExists())
+		mRestart := systray.AddMenuItem("重启", "退出并重新启动 VRTX")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "退出 VRTX")
 
 		// 单击托盘图标即打开网页控制台（按用户习惯：单击开控制台）
 		systray.SetOnClick(func(menu systray.IMenu) { openConsole("") })
 
-		// 菜单点击事件：控制台 / 设置 / 自启开关 / 退出
+		// 菜单点击事件：控制台 / 设置 / 自启开关 / 重启 / 退出
 		mConsole.Click(func() { openConsole("") })
 		mSettings.Click(func() { openConsole("#settings") })
 		mAuto.Click(func() { toggleAutoStart(mAuto) })
+		mRestart.Click(func() { restart() })
 		mQuit.Click(func() { systray.Quit() })
 
 		// 异步精化视觉状态：快速 Stat 只能判断"文件存在"，
