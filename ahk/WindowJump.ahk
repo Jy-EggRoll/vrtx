@@ -20,12 +20,22 @@ class WindowJumpDebug {
 }
 
 ; 全局配置
-global WindowJumpPinyinPartialMatch := true
-global WindowJumpShortcutLabel := "【软件】"
-global WindowJumpBookmarkLabel := "【书签】"
+WindowJumpPinyinPartialMatch := true
+WindowJumpShortcutLabel := "【软件】"
+WindowJumpBookmarkLabel := "【书签】"
 
-global VRTX_BASE := A_Temp "\VRTX"
-global WindowJumpPrevActiveHwnd := 0
+VRTX_BASE := A_Temp "\VRTX"
+WindowJumpPrevActiveHwnd := 0
+
+; 评分权重配置
+ScoreCfg := {
+    Exact: 1000,
+    ExactStart: 200,
+    Pinyin: 800,
+    PinyinStart: 200,
+    TargetLenFactor: 100,
+    CatWeight: { Shortcuts: 500, Bookmarks: 0 },
+}
 
 UpdateTheme()
 InitShortcuts()
@@ -118,6 +128,7 @@ SearchVRTXCategory(query, category, label, adminOnly := false) {
             score := FuzzyScore(searchLower, fullText)
         }
         if (score > 0) {
+            score += ScoreCfg.CatWeight[category]
             if (adminOnly) {
                 results.Push({
                     score: score,
@@ -525,14 +536,14 @@ FuzzyScore(query, target) {
             pinyinFlags |= IbPinyin_PatternPartial
         }
         if InStr(target, token) {
-            tokenScore := 1000
+            tokenScore := ScoreCfg.Exact
             if InStr(target, token, true, 1, 1) {
-                tokenScore += 200
+                tokenScore += ScoreCfg.ExactStart
             }
         } else if IbPinyin_FindMatch(token, target, &start, &end, pinyinFlags) {
-            tokenScore := 800
+            tokenScore := ScoreCfg.Pinyin
             if (start == 1) {
-                tokenScore += 200
+                tokenScore += ScoreCfg.PinyinStart
             }
         }
         if (tokenScore > 0) {
@@ -544,7 +555,7 @@ FuzzyScore(query, target) {
         return 0
     }
     ; target 越短加分越高（精确匹配 > 模糊匹配）
-    totalScore += Round(StrLen(query) / StrLen(target) * 100)
+    totalScore += Round(StrLen(query) / StrLen(target) * ScoreCfg.TargetLenFactor)
     return totalScore
 }
 
@@ -684,8 +695,8 @@ MixColor(Color1, Color2, Weight) {
 
 ; 全局特殊热键绑定
 ; Ctrl 双击触发
-global ctrlIsPressed := false
-global lastCtrlPressTime := 0
+ctrlIsPressed := false
+lastCtrlPressTime := 0
 
 ~Ctrl:: {
     global ctrlIsPressed, lastCtrlPressTime
