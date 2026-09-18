@@ -70,7 +70,7 @@ func enableAutoStart() error {
 	if err != nil {
 		return fmt.Errorf("定位自身可执行文件失败: %w", err)
 	}
-	cmd := exec.Command("schtasks", "/create", "/TN", taskName, "/TR", exe, "/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:03", "/F")
+	cmd := exec.Command("schtasks", "/create", "/TN", taskName, "/TR", exe, "/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:10", "/F")
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
