@@ -32,6 +32,7 @@ type Config struct {
 	IntervalSeconds int           `json:"interval_seconds"` // 监控轮询间隔
 	Watch           bool          `json:"watch"`            // 监控模式总开关
 	AHK             bool          `json:"ahk"`              // 启动时经 UAC 以管理员权限拉起 AutoHotkey 脚本
+	LogLevel        string        `json:"log_level"`        // 日志输出阈值，各级别的含义见 log.go
 	Extract         ExtractConfig `json:"extract"`          // 各类别开关
 }
 
@@ -41,6 +42,7 @@ func defaultConfig() *Config {
 		IntervalSeconds: 1,
 		Watch:           true,
 		AHK:             true,
+		LogLevel:        string(levelInfo),
 		Extract: ExtractConfig{
 			Bookmarks: true,
 			Software:  true,
@@ -59,6 +61,14 @@ func (c *Config) sanitize() {
 	}
 	if c.IntervalSeconds > maxIntervalSeconds {
 		c.IntervalSeconds = maxIntervalSeconds
+	}
+
+	// 日志级别写成非法值时回退默认级别。落盘前统一规范化大小写，
+	// 否则手工写成 "INFO" 会让网页面板的下拉框一项都选不中
+	if lv, ok := parseLevel(c.LogLevel); ok {
+		c.LogLevel = string(lv)
+	} else {
+		c.LogLevel = string(levelInfo)
 	}
 }
 
@@ -91,13 +101,17 @@ func initConfig() {
 	if err := saveConfig(cfg); err != nil {
 		logWarn("无法写入配置文件（exe 位于只读目录？），改动仅本次运行生效：%v", err)
 	} else {
-		logInfo("配置文件：%s", configPath)
+		logDebug("配置文件：%s", configPath)
 	}
 }
 
-// loadConfigFile 加载配置：默认值打底 + JSON 覆盖合并；
+// loadConfigFile 加载配置：默认值作为基准 + JSON 覆盖合并；
 // 仅在启动时调用一次——运行中修改 vrtx.json 需重启生效。
-// 文件不存在或损坏时不炸程序，回退默认值且不覆盖坏文件
+// 文件不存在或损坏时不炸程序，回退默认值且不覆盖坏文件。
+//
+// 这里只需要 c := *def 一次浅拷贝：Extract 本身是值类型，
+// 拷贝后它与 def 已经各不相干，Unmarshal 只会覆盖 JSON 里出现的子字段，
+// 缺失的字段自然保留默认值。
 func loadConfigFile(path string) *Config {
 	def := defaultConfig()
 	data, err := os.ReadFile(path)
@@ -108,7 +122,6 @@ func loadConfigFile(path string) *Config {
 		return def
 	}
 	c := *def
-	c.Extract = def.Extract
 	if err := json.Unmarshal(data, &c); err != nil {
 		logWarn("解析配置失败（%v），使用默认配置", err)
 		return def
@@ -138,6 +151,9 @@ func updateConfig(c *Config) error {
 		logWarn("保存配置文件失败（本次运行仍生效）：%v", err)
 	}
 	cfgPtr.Store(c)
+
+	// 日志级别允许热更新：面板保存后立即生效，无需重启
+	setLogLevel(c.LogLevel)
 	return nil
 }
 
@@ -148,6 +164,7 @@ func modifiedFields(cur, def *Config) map[string]bool {
 		"interval_seconds":  cur.IntervalSeconds != def.IntervalSeconds,
 		"watch":             cur.Watch != def.Watch,
 		"ahk":               cur.AHK != def.AHK,
+		"log_level":         cur.LogLevel != def.LogLevel,
 		"extract.bookmarks": cur.Extract.Bookmarks != def.Extract.Bookmarks,
 		"extract.software":  cur.Extract.Software != def.Extract.Software,
 		"extract.system":    cur.Extract.System != def.Extract.System,

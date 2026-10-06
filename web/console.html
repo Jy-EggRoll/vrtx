@@ -212,6 +212,10 @@
         text-transform: uppercase;
         letter-spacing: 0.3px;
       }
+      .log-level.trace,
+      .log-level.debug {
+        color: var(--text-muted);
+      }
       .log-level.info {
         color: var(--sem-info);
       }
@@ -381,7 +385,8 @@
         width: 90px;
       }
       .field input[type="text"],
-      .field input[type="number"] {
+      .field input[type="number"],
+      .field select {
         font-family: inherit;
         font-size: 12.5px;
         padding: 5px 8px;
@@ -390,7 +395,8 @@
         background: var(--surface);
         color: var(--text);
       }
-      .field input:focus {
+      .field input:focus,
+      .field select:focus {
         outline: none;
         border-color: var(--sem-info);
       }
@@ -460,7 +466,8 @@
         <div class="log-header">
           <span>日志流</span>
           <div class="filters" id="filters">
-            <button class="chip active" data-min="info" type="button">INFO+</button>
+            <button class="chip active" data-min="trace" type="button">全部</button>
+            <button class="chip" data-min="info" type="button">INFO+</button>
             <button class="chip" data-min="warn" type="button">WARN+</button>
           </div>
           <span class="count" id="entry-count">0 条</span>
@@ -541,6 +548,18 @@
               <input type="checkbox" data-key="ahk"><span>启动时拉起 AutoHotkey 脚本（需 UAC 授权，退出时自动结束）</span>
               <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
             </label>
+            <div class="field row">
+              <span class="lab">日志级别</span>
+              <select data-key="log_level">
+                <option value="trace">trace（逐文件明细）</option>
+                <option value="debug">debug（汇总与中间状态）</option>
+                <option value="info">info（默认）</option>
+                <option value="warn">warn</option>
+                <option value="error">error</option>
+                <option value="fatal">fatal（仅致命错误）</option>
+              </select>
+              <button type="button" class="reset-btn" title="恢复此项默认值">↺</button>
+            </div>
           </fieldset>
 
           <div class="actions">
@@ -551,7 +570,7 @@
         </div>
       </section>
     </main>
-    <footer>按 <kbd>Ctrl</kbd>+<kbd>L</kbd> 清空 · VRTX by EggRoll</footer>
+    <footer>按 <kbd>Ctrl</kbd>+<kbd>L</kbd> 清空 · <span id="app-version">VRTX</span> by EggRoll</footer>
 
     <script>
       (function () {
@@ -581,9 +600,11 @@
         var countEl = document.getElementById("entry-count");
         var entryCount = 0;
 
-        /* 级别严重度排序，数值越大越严重；低于 minRank 的条目被隐藏 */
-        var RANK = { info: 1, warn: 2, error: 3, fatal: 3 };
-        var minRank = 1;
+        /* 级别严重度排序，数值越大越严重；低于 minRank 的条目被隐藏。
+           trace 与 debug 同档：两者都是排查用的细节，界面筛选上不必再分两档。
+           这张表必须与 log.go 的 levelRanks 保持一致，改动时两处同步。 */
+        var RANK = { trace: 0, debug: 0, info: 1, warn: 2, error: 3, fatal: 3 };
+        var minRank = 0;
 
         function rankOf(level) {
           return RANK[level] !== undefined ? RANK[level] : 1;
@@ -679,7 +700,7 @@
         var KEYS = [
           "extract.bookmarks", "extract.software", "extract.system",
           "extract.drives", "extract.recent", "extract.office",
-          "watch", "ahk", "interval_seconds"
+          "watch", "ahk", "interval_seconds", "log_level"
         ];
         var viewLog = document.getElementById("view-log");
         var viewSettings = document.getElementById("view-settings");
@@ -757,10 +778,22 @@
           else el.value = v === undefined || v === null ? "" : v;
         }
 
+        /* 版本号由 /api/config 一并下发，填入页脚：本程序是纯 GUI、没有控制台，
+           这里是用户唯一能看到版本的入口 */
+        function fillVersion(d) {
+          var el = document.getElementById("app-version");
+          if (!el || !d.version) return;
+          el.textContent = "VRTX v" + d.version;
+          if (d.build_time && d.build_time !== "unknown") {
+            el.title = "构建时间：" + d.build_time;
+          }
+        }
+
         function loadSettings() {
           fetch("/api/config")
             .then(function (r) { return readAPIResponse(r); })
             .then(function (d) {
+              fillVersion(d);
               curCfg = d.config; defCfg = d.defaults; modMap = d.modified || {};
               var ae = document.activeElement;
               var editing = ae && ae.closest && ae.closest("#view-settings") && ae.dataset && ae.dataset.key;
@@ -847,7 +880,8 @@
             ev.stopPropagation();
             var row = this.closest(".field");
             var el = row && row.querySelector("[data-key]");
-            if (!el || !defCfg) return;            setControl(el, getPath(defCfg, el.dataset.key));
+            if (!el || !defCfg) return;
+            setControl(el, getPath(defCfg, el.dataset.key));
             save();
           });
         }

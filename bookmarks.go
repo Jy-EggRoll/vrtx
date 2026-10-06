@@ -93,7 +93,7 @@ func processBookmarkFile(path, bookmarkDir string) int {
 	}
 
 	n := len(bookmarks)
-	logInfo("%s 书签：生成 %d 个 .url", browserLabel(path), n)
+	logDebug("%s 书签：生成 %d 个 .url", browserLabel(path), n)
 	return n
 }
 
@@ -163,7 +163,7 @@ func createURLFile(bookmarkDir string, bm BookmarkInfo) {
 		logWarn("创建快捷方式失败: %v", err)
 		return
 	}
-	logDebug("生成书签 %s", filename)
+	logTrace("生成书签 %s", filename)
 }
 
 func extractHost(url string) string {

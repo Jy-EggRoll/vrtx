@@ -162,10 +162,10 @@ func startWatch(ctx context.Context) {
 					}
 				}
 				if len(changedFiles) > 0 {
-					logInfo("书签文件已变更：%s", strings.Join(changedFiles, "、"))
+					logDebug("书签文件已变更：%s", strings.Join(changedFiles, "、"))
 					rebuildSubdir(getOutputDir(), "Bookmarks")
 					n := extractBookmarks(getOutputDir())
-					logInfo("书签重建完成：共 %d 个 .url", n)
+					logDebug("书签重建完成：共 %d 个 .url", n)
 				}
 			}
 
@@ -195,15 +195,15 @@ func startWatch(ctx context.Context) {
 				}
 				if len(changedDirs)+len(addedDrives)+len(removedDrives) > 0 {
 					if len(changedDirs) > 0 {
-						logInfo("快捷方式目录已变更：%s", strings.Join(changedDirs, "、"))
+						logDebug("快捷方式目录已变更：%s", strings.Join(changedDirs, "、"))
 					}
 					if len(addedDrives) > 0 || len(removedDrives) > 0 {
-						logInfo("盘符变化：新增 %s，移除 %s",
+						logDebug("盘符变化：新增 %s，移除 %s",
 							driveDisplay(addedDrives), driveDisplay(removedDrives))
 					}
 					rebuildSubdir(getOutputDir(), "Shortcuts")
 					extractShortcuts(getOutputDir(), e.Software, e.System, e.Drives, e.Recent, e.Office)
-					logInfo("快捷方式重建完成")
+					logDebug("快捷方式重建完成")
 				}
 			}
 
@@ -252,11 +252,11 @@ func driveDisplay(drives []string) string {
 func runFullExtract(dir string) {
 	e := current().Extract
 	if e.Bookmarks {
-		logInfo("正在提取书签...")
+		logDebug("正在提取书签...")
 		extractBookmarks(dir)
 	}
 	if e.Software || e.System || e.Drives || e.Recent || e.Office {
-		logInfo("正在提取快捷方式...")
+		logDebug("正在提取快捷方式...")
 		extractShortcuts(dir, e.Software, e.System, e.Drives, e.Recent, e.Office)
 	}
 }

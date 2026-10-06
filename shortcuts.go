@@ -99,7 +99,7 @@ func extractStartMenuShortcuts(shortcutDir string) {
 	for _, dir := range startMenuDirs() {
 		total += copyLnkFiles(dir, targetDir)
 	}
-	logInfo("开始菜单：写入 %d 个快捷方式", total)
+	logDebug("开始菜单：写入 %d 个快捷方式", total)
 }
 
 // listLnkNames 列出目录下现有 .lnk 文件名集合，用于 PowerShell 执行前后对比统计新建数量
@@ -117,8 +117,8 @@ func listLnkNames(dir string) map[string]struct{} {
 	return names
 }
 
-// reportNewLnks 对比执行前后的 .lnk 集合，报告新建数量（少量时以 debug 级列出明细）。
-// 返回新建数量，供调用方聚合统计。
+// reportNewLnks 对比执行前后的 .lnk 集合，以 debug 级报告新建数量，
+// 并在数量不多时以 trace 级列出明细。返回新建数量，供调用方聚合统计。
 func reportNewLnks(label string, before, after map[string]struct{}) int {
 	var created []string
 	for name := range after {
@@ -127,13 +127,13 @@ func reportNewLnks(label string, before, after map[string]struct{}) int {
 		}
 	}
 	sort.Strings(created)
-	logInfo("%s：新建 %d 个快捷方式", label, len(created))
+	logDebug("%s：新建 %d 个快捷方式", label, len(created))
 	if len(created) > 0 && len(created) <= 20 {
 		names := make([]string, len(created))
 		for i, name := range created {
 			names[i] = strings.TrimSuffix(name, ".lnk")
 		}
-		logDebug("新建明细：%s", strings.Join(names, "、"))
+		logTrace("新建明细：%s", strings.Join(names, "、"))
 	}
 	return len(created)
 }
@@ -177,7 +177,7 @@ func extractRecentShortcuts(shortcutDir string) {
 	os.MkdirAll(targetDir, 0755)
 
 	n := copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Recent"), targetDir)
-	logInfo("最近文件：写入 %d 个快捷方式", n)
+	logDebug("最近文件：写入 %d 个快捷方式", n)
 }
 
 // extractOfficeShortcuts 复制 Office 最近文件夹中的 .lnk 快捷方式。
@@ -187,7 +187,7 @@ func extractOfficeShortcuts(shortcutDir string) {
 	os.MkdirAll(targetDir, 0755)
 
 	n := copyLnkFiles(filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Office", "Recent"), targetDir)
-	logInfo("Office 最近：写入 %d 个快捷方式", n)
+	logDebug("Office 最近：写入 %d 个快捷方式", n)
 }
 
 func extractSystemShortcuts(shortcutDir string) {
@@ -223,7 +223,13 @@ foreach ($item in $items) {
 }
 
 // extractDriveShortcuts 为每个可用盘符创建 .lnk 快捷方式。
-// 盘符探测使用 os.Stat 检查根目录是否存在，从 C 开始（跳过 A/B 传统软驱）。
+//
+// 盘符在这里有两个来源，分工不同、判定结果也可能不一致：本函数开头只用
+// getAvailableDrives()（os.Stat 探测）判断“系统上是否至少存在一个盘符”，
+// 真正的枚举与卷标读取交给下面的 PowerShell Get-PSDrive。
+// 两者对“无介质的读卡器、空光驱”这类设备判断不同，因此监控侧记录的盘符基线
+// （同样取自 getAvailableDrives）未必与实际生成的快捷方式一一对应。
+// 若要统一，应让 Go 侧把盘符列表作为参数传给脚本，脚本不再自行枚举。
 func extractDriveShortcuts(shortcutDir string) {
 	targetDir := filepath.Join(shortcutDir, "Drives")
 	os.MkdirAll(targetDir, 0755)
@@ -317,7 +323,7 @@ func copyLnkFiles(srcDir, dstDir string) int {
 			return nil
 		}
 		copied++
-		logDebug("复制 %s", d.Name())
+		logTrace("复制 %s", d.Name())
 		return nil
 	})
 	return copied

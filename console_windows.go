@@ -85,10 +85,15 @@ func startLogServer() (string, error) {
 	})
 
 	logServer = &http.Server{Handler: mux}
-	go logServer.Serve(ln)
+	// Serve 出错或 panic 都只会结束这个 goroutine，兜一层保证异常被记录，
+	// 而不是带着整个进程一起消失
+	go func() {
+		defer recoverLog("网页控制台服务")
+		_ = logServer.Serve(ln)
+	}()
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
-	logInfo("网页控制台已启动：%s", url)
+	logDebug("网页控制台已启动：%s", url)
 	return url, nil
 }
 
@@ -103,6 +108,10 @@ func apiConfigHandler(w http.ResponseWriter, r *http.Request) {
 			"config":   cur,
 			"defaults": def,
 			"modified": modifiedFields(cur, def),
+			// 版本号随配置接口一并下发：本程序没有控制台，网页是唯一的展示位置，
+			// 而前端首屏本来就会请求这个接口，不必再单开一条路由
+			"version":    Version,
+			"build_time": BuildTime,
 		})
 	case http.MethodPost:
 		if !sameOrigin(r) {
