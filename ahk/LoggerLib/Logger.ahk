@@ -125,15 +125,22 @@ OpenConsole() {
 }
 
 /**
- * 限制日志文件大小，超过指定大小则删除
+ * 限制日志文件大小，超过指定大小则轮转为 .1
  * @param filePath 日志文件路径
- * @param maxSizeInBytes 最大允许的文件大小，默认 1MiB，超过则删除
+ * @param maxSizeInBytes 最大允许的文件大小，默认 1MiB，超过则轮转
+ *
+ * 原先超过上限是直接删除，等于丢掉全部历史，而这个日志的用途恰恰是回答
+ * “上次为什么异常退出”，删除会让唯一的线索消失。改为轮转并保留一代，
+ * 与 Go 侧 vrtx.log 的处理方式保持一致。
  */
 LimitFileSize(filePath, maxSizeInBytes := 1024 * 1024) {
     if FileExist(filePath) {
         fileSize := FileGetSize(filePath)
         if (fileSize > maxSizeInBytes) {
-            FileDelete(filePath)
+            backup := filePath ".1"
+            if FileExist(backup)
+                FileDelete(backup)
+            FileMove(filePath, backup)
         }
     }
 }

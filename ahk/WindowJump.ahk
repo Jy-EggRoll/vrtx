@@ -27,6 +27,12 @@ WindowJumpBookmarkLabel := "【书签】"
 VRTX_BASE := A_Temp "\VRTX"
 WindowJumpPrevActiveHwnd := 0
 
+; AHK 侧的异常日志与 Go 侧的 vrtx.log 放在同一目录，便于对照时间线；
+; 用独立文件名是因为两个进程各自持有句柄，写同一个文件会互相干扰
+WindowJumpLogFile := A_LocalAppData "\VRTX\ahk.log"
+if !DirExist(A_LocalAppData "\VRTX")
+    DirCreate(A_LocalAppData "\VRTX")
+
 ; 评分权重配置
 ScoreCfg := {
     Exact: 1000,
@@ -36,6 +42,9 @@ ScoreCfg := {
     TargetLenFactor: 100,
     CatWeight: Map("Shortcuts", 500, "Bookmarks", 0),
 }
+
+; 启动标记：与 Go 侧的启动、退出标记配对，用来确认 AHK 是否曾正常运行
+LogInfo("WindowJump.ahk 已启动", WindowJumpLogFile)
 
 UpdateTheme()
 InitShortcuts()
@@ -177,7 +186,7 @@ WindowJump(pinyinPartialMatch := "") {
             WindowJumpPrevActiveHwnd := prevHwnd
         }
     } catch Error as e {
-        LogError(e, , WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
     }
 
     if (MyGui) {
@@ -204,7 +213,7 @@ WindowJump(pinyinPartialMatch := "") {
                     WindowJumpPrevActiveHwnd := reusePrev
                 }
             } catch Error as e {
-                LogError(e, , WindowJumpDebug.mode)
+                LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
             }
             MyGui["SearchInput"].Value := ""
             MyGui["SearchInput"].Focus()
@@ -400,7 +409,7 @@ CancelSwitcher(guiObj) {
             }
         }
     } catch Error as e {
-        LogError(e, , WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
     }
 }
 
@@ -624,7 +633,7 @@ ActivateWin(LV, RowNumber) {
             }
         }
     } catch Error as e {
-        LogError(e, , WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
     }
 }
 
@@ -632,7 +641,10 @@ AdminRun(Target) {
     try {
         DllCall("Shell32\ShellExecuteW", "Ptr", 0, "Str", "runas", "Str", Target, "Ptr", 0, "Ptr", 0, "Int", 1)
     } catch as e {
-        LogError("RunAsAdmin 失败: " e.Message, , WindowJumpDebug.mode)
+        ; LogError 期望的是 Error 对象，直接传字符串会让它在读取 .Message 等
+        ; 属性时再次抛错。把上下文写进 Extra，仍然按错误对象记录
+        e.Extra := "RunAsAdmin 失败"
+        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
     }
 }
 
@@ -646,7 +658,7 @@ UserRun(Target, Args := "", WorkingDir := "") {
             desktop.Document.Application.ShellExecute(Target, Args, WorkingDir, "open", 1)
         }
     } catch Error as e {
-        LogError(e, , WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
     }
 }
 
