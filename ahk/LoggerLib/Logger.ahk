@@ -42,9 +42,9 @@ LogError(ErrorObj, filePath := "*", showConsole := false) {
     errorContent .= "`n"
 
     if (filePath = "*") {
-        SetConsoleColor(0x0C)
+        prevAttr := SetConsoleColor(0x0C)
         FileAppend(errorContent, filePath)
-        ResetConsoleColor()
+        ResetConsoleColor(prevAttr)
     } else {
         FileAppend(errorContent, filePath)
         LimitFileSize(filePath)
@@ -65,9 +65,9 @@ WriteLog(level, str, filePath, showConsole, colorAttr) {
     logLine := timestamp " [" level "] " str "`n"
 
     if (filePath = "*") {
-        SetConsoleColor(colorAttr)
+        prevAttr := SetConsoleColor(colorAttr)
         FileAppend(logLine, filePath)
-        ResetConsoleColor()
+        ResetConsoleColor(prevAttr)
     } else {
         FileAppend(logLine, filePath)
         LimitFileSize(filePath)
@@ -75,31 +75,34 @@ WriteLog(level, str, filePath, showConsole, colorAttr) {
 }
 
 /**
- * 设置控制台前景颜色
+ * 设置控制台前景颜色，并返回设置前的颜色
+ *
+ * 复原用的颜色必须由调用方当场保存：LogError 会先把控制台改成红色再复原，
+ * 如果复原方那时才第一次去读“当前颜色”并把它当成默认色，读到的已经是被改红的
+ * 值，之后控制台会一直红着。这里不缓存默认色，改成显式传递。
  * @param attr 控制台颜色属性
+ * @returns 设置前的颜色属性
  */
 SetConsoleColor(attr) {
     hConsole := DllCall("GetStdHandle", "int", -11, "ptr")
     if !hConsole || hConsole = -1
-        return
+        return 0x07
 
-    static defaultAttr := ""
-    if (defaultAttr = "")
-        defaultAttr := GetConsoleTextAttribute()
-
+    prevAttr := GetConsoleTextAttribute()
     DllCall("SetConsoleTextAttribute", "ptr", hConsole, "ushort", attr)
+    return prevAttr
 }
 
-ResetConsoleColor() {
+/**
+ * 恢复 SetConsoleColor 设置前的颜色
+ * @param prevAttr SetConsoleColor 的返回值
+ */
+ResetConsoleColor(prevAttr) {
     hConsole := DllCall("GetStdHandle", "int", -11, "ptr")
     if !hConsole || hConsole = -1
         return
 
-    static defaultAttr := ""
-    if (defaultAttr = "")
-        defaultAttr := GetConsoleTextAttribute()
-
-    DllCall("SetConsoleTextAttribute", "ptr", hConsole, "ushort", defaultAttr)
+    DllCall("SetConsoleTextAttribute", "ptr", hConsole, "ushort", prevAttr)
 }
 
 GetConsoleTextAttribute() {

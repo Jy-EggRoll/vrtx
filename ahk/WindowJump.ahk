@@ -15,10 +15,6 @@ if A_Args.Length >= 1 {
 #Include ./WindowStyleLib/WindowStyle.ahk
 #Include ./PinYinLib/IbPinyin.ahk
 
-class WindowJumpDebug {
-    static mode := false
-}
-
 ; 全局配置
 WindowJumpPinyinPartialMatch := true
 WindowJumpShortcutLabel := "【软件】"
@@ -27,11 +23,25 @@ WindowJumpBookmarkLabel := "【书签】"
 VRTX_BASE := A_Temp "\VRTX"
 WindowJumpPrevActiveHwnd := 0
 
+; 图标缓存放在文件级而不是函数 static：EditBox 的 Change 回调是个闭包，它需要
+; 把缓存引用交给搜索函数，而“闭包对外层函数的 static 取引用”这一组合官方文档
+; 没有正面描述（Functions.htm 只说嵌套函数可以引用外层的局部与 static 变量），
+; 提升为全局后各处按名引用，不再依赖解释器对这一组合的处理方式。
+iconCache := Map()
+shortcutCache := Map()
+
 ; AHK 侧的异常日志与 Go 侧的 vrtx.log 放在同一目录，便于对照时间线；
-; 用独立文件名是因为两个进程各自持有句柄，写同一个文件会互相干扰
-WindowJumpLogFile := A_LocalAppData "\VRTX\ahk.log"
-if !DirExist(A_LocalAppData "\VRTX")
-    DirCreate(A_LocalAppData "\VRTX")
+; 用独立文件名是因为两个进程各自持有句柄，写同一个文件会互相干扰。
+; 目录从环境变量取：AHK 只有 A_AppData，它指向 Roaming，没有对应的
+; LOCALAPPDATA 内建变量，而 Go 侧的 os.UserCacheDir() 用的正是后者。
+; 环境变量缺失时退回临时目录，避免把日志写到当前盘根目录。
+VRTX_LOG_DIR := EnvGet("LOCALAPPDATA")
+if (VRTX_LOG_DIR = "")
+    VRTX_LOG_DIR := A_Temp
+VRTX_LOG_DIR .= "\VRTX"
+WindowJumpLogFile := VRTX_LOG_DIR "\ahk.log"
+if !DirExist(VRTX_LOG_DIR)
+    DirCreate(VRTX_LOG_DIR)
 
 ; 评分权重配置
 ScoreCfg := {
@@ -174,8 +184,6 @@ WindowJump(pinyinPartialMatch := "") {
 
     static MyGui := 0
     static hIL := 0
-    static iconCache := Map()
-    static shortcutCache := Map()
     static lastTheme := ""
     static lastAccent := ""
 
@@ -186,11 +194,11 @@ WindowJump(pinyinPartialMatch := "") {
             WindowJumpPrevActiveHwnd := prevHwnd
         }
     } catch Error as e {
-        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile)
     }
 
     if (MyGui) {
-        global IsDarkMode, AccentColor
+        global IsDarkMode, AccentColor, iconCache, shortcutCache
         currentTheme := IsDarkMode ? "dark" : "light"
         currentAccent := AccentColor
         themeChanged := (lastTheme != "" && lastTheme != currentTheme)
@@ -213,7 +221,7 @@ WindowJump(pinyinPartialMatch := "") {
                     WindowJumpPrevActiveHwnd := reusePrev
                 }
             } catch Error as e {
-                LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+                LogError(e, WindowJumpLogFile)
             }
             MyGui["SearchInput"].Value := ""
             MyGui["SearchInput"].Focus()
@@ -254,7 +262,7 @@ WindowJump(pinyinPartialMatch := "") {
 
     RefreshAllWindows(ResultList, hIL, iconCache)
 
-    EditBox.OnEvent("Change", (obj, *) => ScheduleSearch(obj, MyGui["ResultList"], hIL, &iconCache, &shortcutCache))
+    EditBox.OnEvent("Change", (obj, *) => ScheduleSearch(obj, MyGui["ResultList"], hIL))
     ResultList.OnEvent("DoubleClick", (obj, row) => ActivateWin(obj, row))
 
     HotIfWinActive("ahk_id " . MyGui.Hwnd)
@@ -282,10 +290,10 @@ CloseSelectedWindow(LV) {
         isShortcut := LV.GetText(row, 3) = "1"
         if (hwnd && !isShortcut) {
             ; 临时开启 DetectHiddenWindows，保证可以跨虚拟桌面关闭软件窗口
+            bakDetectHidden := A_DetectHiddenWindows
             DetectHiddenWindows(true)
             PostMessage(0x10, 0, 0, , "ahk_id " . hwnd)
-            ; 恢复默认设置
-            DetectHiddenWindows(false)
+            DetectHiddenWindows(bakDetectHidden)
             LV.Delete(row)
             if (LV.GetCount() > 0) {
                 nextRow := (row > LV.GetCount()) ? LV.GetCount() : row
@@ -295,15 +303,15 @@ CloseSelectedWindow(LV) {
     }
 }
 
-ScheduleSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
+ScheduleSearch(EditObj, LV, hIL) {
     static timer := 0
     if (timer) {
         SetTimer(timer, 0)
     }
-    timer := SetTimer(() => UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache), -20)
+    timer := SetTimer(() => UpdateSearch(EditObj, LV, hIL), -20)
 }
 
-UpdateSearch(EditObj, LV, hIL, &iconCache, &shortcutCache) {
+UpdateSearch(EditObj, LV, hIL) {
     global WindowJumpShortcutLabel, WindowJumpBookmarkLabel
     rawInput := EditObj.Value
     LV.Delete()
@@ -409,7 +417,7 @@ CancelSwitcher(guiObj) {
             }
         }
     } catch Error as e {
-        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile)
     }
 }
 
@@ -507,7 +515,9 @@ GetExeIconIndex(filePath, hIL) {
             }
         }
     }
-    return IL_Add(hIL, filePath)
+    ; IL_Add 失败会返回 0，而 ListView 的 Icon 选项不接受 0，用它填充会直接抛错
+    idx := IL_Add(hIL, filePath)
+    return idx ? idx : 1
 }
 
 GetUwpIconFromWindow(hwnd, hIL) {
@@ -565,7 +575,8 @@ FuzzyScore(query, target) {
         return 0
     }
     ; target 越短加分越高（精确匹配 > 模糊匹配）
-    totalScore += Round(StrLen(query) / StrLen(target) * ScoreCfg.TargetLenFactor)
+    ; 分母至少取 1：扫描 VRTX 目录时可能遇到空名条目，除零会直接抛错
+    totalScore += Round(StrLen(query) / Max(StrLen(target), 1) * ScoreCfg.TargetLenFactor)
     return totalScore
 }
 
@@ -633,7 +644,7 @@ ActivateWin(LV, RowNumber) {
             }
         }
     } catch Error as e {
-        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile)
     }
 }
 
@@ -644,7 +655,7 @@ AdminRun(Target) {
         ; LogError 期望的是 Error 对象，直接传字符串会让它在读取 .Message 等
         ; 属性时再次抛错。把上下文写进 Extra，仍然按错误对象记录
         e.Extra := "RunAsAdmin 失败"
-        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile)
     }
 }
 
@@ -658,7 +669,7 @@ UserRun(Target, Args := "", WorkingDir := "") {
             desktop.Document.Application.ShellExecute(Target, Args, WorkingDir, "open", 1)
         }
     } catch Error as e {
-        LogError(e, WindowJumpLogFile, WindowJumpDebug.mode)
+        LogError(e, WindowJumpLogFile)
     }
 }
 
