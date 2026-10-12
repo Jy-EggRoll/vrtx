@@ -19,7 +19,6 @@ if A_Args.Length >= 1 {
 WindowJumpPinyinPartialMatch := true
 WindowJumpShortcutLabel := "【软件】"
 WindowJumpBookmarkLabel := "【书签】"
-
 VRTX_BASE := A_Temp "\VRTX"
 WindowJumpPrevActiveHwnd := 0
 
@@ -206,6 +205,8 @@ GetOverlayLayout() {
     static DESIGN_W := 600
     static DESIGN_H := 450
     static DESIGN_FONT := 12
+    ; 图标是字号像素高的多少倍，稍大于 1 才不会显得比文字小
+    static ICON_FONT_RATIO := 1.15
 
     ; MouseGetPos 默认给的是相对活动窗口的坐标，这里要屏幕坐标
     CoordMode "Mouse", "Screen"
@@ -239,6 +240,11 @@ GetOverlayLayout() {
     ; 它只用于排查，写失败不该拖累唤出（LoggerLib 内部不吞异常）。
     try LogInfo("浮层定位 显示器" . monitor . " DPI" . dpi . " 缩放" . scale . " 位置" . overlayX . "," . overlayY, WindowJumpLogFile)
 
+    ; 12pt 在 96 DPI 下是 16 像素高，按 scale 缩放后反推点数（见 GetFontPixelsPerPoint）
+    fontSize := Round(DESIGN_FONT * 96 * scale / GetFontPixelsPerPoint())
+    ; 图标按字号像素高的固定倍数算，不必去试行高
+    iconSize := Round(DESIGN_FONT * 96 / 72 * scale * ICON_FONT_RATIO)
+
     return {
         dpi: dpi,
         scale: scale,
@@ -246,10 +252,8 @@ GetOverlayLayout() {
         height: height,
         x: overlayX,
         y: overlayY,
-        ; 12pt 在 96 DPI 下是 16 像素高，按 scale 缩放后反推点数（见 GetFontPixelsPerPoint）
-        font: Round(DESIGN_FONT * 96 * scale / GetFontPixelsPerPoint()),
-        ; 图标取字号在目标屏上的像素高度，两者等高才不会显得脱节
-        iconSize: Round(DESIGN_FONT * 96 / 72 * scale)
+        font: fontSize,
+        iconSize: iconSize
     }
 }
 
