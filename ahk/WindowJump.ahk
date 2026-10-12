@@ -173,6 +173,127 @@ SearchVRTXCategory(query, category, label, adminOnly := false) {
     return results
 }
 
+; 浮层跟随鼠标所在显示器，并按该屏的缩放比例渲染。AutoHotkey v2.0 对这两件事都没有
+; 现成做法：Gui.Show("Center") 取的是主显示器的工作区，写死在源码里；解释器的清单是
+; System DPI Aware，窗口移到别的缩放比例上会被 Windows 按位图拉伸，字就糊。随包分发的
+; vrtxahk.exe 不能改，所以位置、尺寸、字体与图标都只能自己算。
+;
+; 下面这个函数把当前线程临时提到 per-monitor（-3），消除位图拉伸与坐标换算，返回先前的
+; 上下文供还原。不用 -4 是因为它会连带缩放非客户区，而 v2.0 的 Gui 不响应 WM_DPICHANGED；
+; 浮层无边框、每次唤出都重新定位，用 -3 已经够。
+SetPerMonitorContext() {
+    static unavailable := false
+    if (unavailable)
+        return 0
+    try {
+        return DllCall("SetThreadDpiAwarenessContext", "ptr", -3, "ptr")
+    } catch {
+        ; Windows 10 1607 之前没有这个导出：退回原样，浮层仍跟随显示器，只是会糊
+        unavailable := true
+        return 0
+    }
+}
+
+RestoreDpiContext(prev) {
+    if (prev)
+        DllCall("SetThreadDpiAwarenessContext", "ptr", prev, "ptr")
+}
+
+; 取目标显示器的工作区与缩放比例，算好浮层的尺寸、坐标与字号。
+; 调用前必须已经在 per-monitor 上下文里，返回的坐标才是该屏的物理像素（见 WindowJump）。
+GetOverlayLayout() {
+    ; 96 DPI 下的设计尺寸，实际尺寸按目标屏缩放比例放大
+    static DESIGN_W := 600
+    static DESIGN_H := 450
+    static DESIGN_FONT := 12
+
+    ; MouseGetPos 默认给的是相对活动窗口的坐标，这里要屏幕坐标
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &mx, &my
+
+    ; 鼠标所在的显示器；鼠标落在显示器之间的空隙时退回主屏
+    monitor := 0
+    Loop MonitorGetCount() {
+        MonitorGet A_Index, &left, &top, &right, &bottom
+        if (mx >= left && mx < right && my >= top && my < bottom) {
+            monitor := A_Index
+            break
+        }
+    }
+    if (monitor = 0)
+        monitor := MonitorGetPrimary()
+
+    ; 工作区已排除任务栏，比主屏的 SPI_GETWORKAREA 更贴合目标屏
+    MonitorGetWorkArea monitor, &workLeft, &workTop, &workRight, &workBottom
+
+    dpi := ProbeMonitorDpi(workLeft, workTop)
+    ; 缩放既要跟显示器 DPI，也要受屏幕尺寸约束：竖屏或小屏配高缩放时，
+    ; 只按 DPI 放大可能让浮层超出屏幕边缘。取三者最小值即可兼顾。
+    scale := Min(dpi / 96, (workRight - workLeft) / DESIGN_W, (workBottom - workTop) / DESIGN_H)
+    width := Round(DESIGN_W * scale)
+    height := Round(DESIGN_H * scale)
+    overlayX := workLeft + (workRight - workLeft - width) // 2
+    overlayY := workTop + (workBottom - workTop - height) // 2
+
+    ; 多显示器出问题时先看这一行：选了哪块屏、按什么缩放、落在哪个坐标。
+    ; 它只用于排查，写失败不该拖累唤出（LoggerLib 内部不吞异常）。
+    try LogInfo("浮层定位 显示器" . monitor . " DPI" . dpi . " 缩放" . scale . " 位置" . overlayX . "," . overlayY, WindowJumpLogFile)
+
+    return {
+        dpi: dpi,
+        scale: scale,
+        width: width,
+        height: height,
+        x: overlayX,
+        y: overlayY,
+        ; 12pt 在 96 DPI 下是 16 像素高，按 scale 缩放后反推点数（见 GetFontPixelsPerPoint）
+        font: Round(DESIGN_FONT * 96 * scale / GetFontPixelsPerPoint()),
+        ; 图标取字号在目标屏上的像素高度，两者等高才不会显得脱节
+        iconSize: Round(DESIGN_FONT * 96 / 72 * scale)
+    }
+}
+
+; 目标显示器的有效 DPI。现成的取法都不牢靠：GetDpiForMonitor 随调用进程的 DPI 感知
+; 变化，本进程是 System DPI Aware，在副屏上只能拿到主屏的值；GetDpiForWindow 对别人
+; 的窗口会返回它创建时的 DPI，同样可能过期。所以摆一个自己的窗口到目标屏上再问它。
+ProbeMonitorDpi(workLeft, workTop) {
+    probe := 0
+    try {
+        probe := Gui("-Caption +ToolWindow -DPIScale")
+        probe.Show("x" . workLeft . " y" . workTop . " w1 h1 NoActivate")
+        dpi := DllCall("GetDpiForWindow", "ptr", probe.Hwnd, "uint")
+        if (dpi >= 96)
+            return dpi
+    } catch Error as e {
+        LogError(e, WindowJumpLogFile)
+    } finally {
+        ; 探针只为问一句话，任何路径下都不该留在屏幕上
+        if (probe)
+            probe.Destroy()
+    }
+    return A_ScreenDPI
+}
+
+; SetFont 把点数换算成像素高度时，取的是屏幕设备上下文报出的 LOGPIXELSY，这个值与
+; 浮层所在显示器的 DPI 未必相等，也不受 Gui 的 DPIScale 开关影响。所以按同样的方式
+; 量一次，再反推能让字体落在目标像素高度上的点数。
+GetFontPixelsPerPoint() {
+    hdc := DllCall("GetDC", "ptr", 0, "ptr")
+    pixelsPerPoint := DllCall("GetDeviceCaps", "ptr", hdc, "int", 90)   ; 90 = LOGPIXELSY
+    DllCall("ReleaseDC", "ptr", 0, "ptr", hdc)
+    return pixelsPerPoint > 0 ? pixelsPerPoint : 96
+}
+
+; 按目标尺寸建图标列表，让图标跟字体一起缩放。IL_Create 只能选系统的小图标或大图标
+; 两档（它在源码里把"任意尺寸"留给了未来的参数），所以直接用 ImageList_Create：
+; IL_Add 与 SetImageList 收的都是 HIMAGELIST 句柄，自建的同样能用；而且 IL_Add 会先读
+; 列表的实际尺寸再按该尺寸加载图标，所以放大之后依然是清晰的。
+CreateIconList(iconSize) {
+    static ILC_MASK := 0x1
+    static ILC_COLOR32 := 0x20
+    return DllCall("ImageList_Create", "int", iconSize, "int", iconSize, "uint", ILC_MASK | ILC_COLOR32, "int", 10, "int", 5, "ptr")
+}
+
 ; 主入口
 WindowJump(pinyinPartialMatch := "") {
     global WindowJumpPinyinPartialMatch
@@ -186,6 +307,8 @@ WindowJump(pinyinPartialMatch := "") {
     static hIL := 0
     static lastTheme := ""
     static lastAccent := ""
+    static lastScale := 0
+    static focusCheck := 0
 
     global WindowJumpPrevActiveHwnd
     try {
@@ -197,22 +320,35 @@ WindowJump(pinyinPartialMatch := "") {
         LogError(e, WindowJumpLogFile)
     }
 
-    if (MyGui) {
+    ; 浮层的坐标、尺寸与字体都按目标屏计算，全程必须在 per-monitor 上下文里做；
+    ; finally 把线程还原，避免这套上下文泄漏到后续热键线程、改变其它调用的坐标语义。
+    prevCtx := SetPerMonitorContext()
+    try {
+        layout := GetOverlayLayout()
         global IsDarkMode, AccentColor, iconCache, shortcutCache
+        px := (v) => Round(v * layout.scale)
         currentTheme := IsDarkMode ? "dark" : "light"
         currentAccent := AccentColor
-        themeChanged := (lastTheme != "" && lastTheme != currentTheme)
-        accentChanged := (lastAccent != "" && lastAccent != currentAccent)
 
-        if (themeChanged || accentChanged) {
-            MyGui.Destroy()
-            MyGui := 0
-            hIL := 0
-            iconCache := Map()
-            shortcutCache := Map()
+        if (MyGui) {
+            themeChanged := (lastTheme != "" && lastTheme != currentTheme)
+            accentChanged := (lastAccent != "" && lastAccent != currentAccent)
+            ; 缩放比例变了必须重建：控件尺寸与字体在创建时就已固化，事后改 DPIScale
+            ; 或重设字体都不会重排既有控件（官方文档明确说明这一点）。
+            scaleChanged := (lastScale != layout.scale)
+
+            if (themeChanged || accentChanged || scaleChanged) {
+                MyGui.Destroy()
+                MyGui := 0
+                hIL := 0
+                iconCache := Map()
+                shortcutCache := Map()
+            }
         }
         lastTheme := currentTheme
         lastAccent := currentAccent
+        ; 在重建判断之后更新，否则重建完仍留着旧值，下次唤出会再重建一次
+        lastScale := layout.scale
 
         if (MyGui) {
             try {
@@ -226,55 +362,57 @@ WindowJump(pinyinPartialMatch := "") {
             MyGui["SearchInput"].Value := ""
             MyGui["SearchInput"].Focus()
             RefreshAllWindows(MyGui["ResultList"], hIL, iconCache)
-            MyGui.Show("Center")
+            MyGui.Show("x" . layout.x . " y" . layout.y)
             return
         }
-    } else {
-        global IsDarkMode, AccentColor
-        lastTheme := IsDarkMode ? "dark" : "light"
-        lastAccent := AccentColor
+
+        MyGui := Gui("-Caption +AlwaysOnTop +Owner +LastFound -DPIScale", "QuickSwitcher")
+        MyGui.BackColor := BgColor
+        MyGui.SetFont("s" . layout.font . " c" . FontColor, "微软雅黑")
+
+        radius := px(20)
+        WinSetRegion("0-0 w" . layout.width . " h" . layout.height . " r" . radius . "-" . radius, MyGui.Hwnd)
+
+        MyGui.Add("Text", "x" . px(25) . " y" . px(15) . " h" . px(30) . " c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签 | as 管理员")
+
+        EditBox := MyGui.Add("Edit", "x" . px(20) . " y" . px(45) . " w" . px(560) . " h" . px(22) . " vSearchInput -E0x200 Background" . ListViewBg)
+
+        hIL := CreateIconList(layout.iconSize)
+
+        ResultList := MyGui.Add("ListView", "x" . px(20) . " y" . px(95) . " w" . px(560) . " r14 -Multi -Hdr -E0x200 vResultList +LV0x140 Background" .
+            ListViewBg . " c" . FontColor, ["Display", "HWND", "IsShortcut", "IsAdmin"])
+
+        ; 显式指定 small：图标尺寸大于系统小图标时，不指定类型会被当成大图标列表，
+        ; 而 report 视图只认 small，图标就显示不出来
+        ResultList.SetImageList(hIL, 1)
+        ResultList.ModifyCol(1, px(540))
+        ResultList.ModifyCol(2, 0)
+        ResultList.ModifyCol(3, 0)
+        ResultList.ModifyCol(4, 0)
+
+        RefreshAllWindows(ResultList, hIL, iconCache)
+
+        EditBox.OnEvent("Change", (obj, *) => ScheduleSearch(obj, MyGui["ResultList"], hIL))
+        ResultList.OnEvent("DoubleClick", (obj, row) => ActivateWin(obj, row))
+
+        HotIfWinActive("ahk_id " . MyGui.Hwnd)
+        Hotkey("Escape", (*) => CancelSwitcher(MyGui), "On")
+        Hotkey("Down", (*) => MoveLVSelection(MyGui["ResultList"], "Down"), "On")
+        Hotkey("Up", (*) => MoveLVSelection(MyGui["ResultList"], "Up"), "On")
+        Hotkey("Enter", (*) => HandleEnter(MyGui), "On")
+        Hotkey("Delete", (*) => CloseSelectedWindow(MyGui["ResultList"]), "On")
+
+        ; 定时器要先停掉旧的再挂新的：直接 SetTimer 一个新回调对象，AHK 会把它当成
+        ; 另一个定时器，旧的那个仍在跑，于是一次重建就多一个。
+        if (focusCheck)
+            SetTimer(focusCheck, 0)
+        focusCheck := () => CheckWinFocus(MyGui)
+        SetTimer(focusCheck, 100)
+
+        MyGui.Show("x" . layout.x . " y" . layout.y . " w" . layout.width . " h" . layout.height)
+    } finally {
+        RestoreDpiContext(prevCtx)
     }
-
-    MyGui := Gui("-Caption +AlwaysOnTop +Owner +LastFound", "QuickSwitcher")
-    MyGui.BackColor := BgColor
-    MyGui.SetFont("s" . FontSize " c" . FontColor, "微软雅黑")
-
-    scaleFactor := A_ScreenDPI / 96
-    w_phys := 600 * scaleFactor
-    h_phys := 450 * scaleFactor
-    r_phys := 20 * scaleFactor
-    WinSetRegion("0-0 w" . w_phys . " h" . h_phys . " r" . r_phys . "-" . r_phys, MyGui.Hwnd)
-
-    MyGui.Add("Text", "x25 y15 h30 c" . AccentColor, "快速跳转 | Del 关闭窗口 | s 软件 | b 书签 | as 管理员")
-
-    EditBox := MyGui.Add("Edit", "x20 y45 w560 h22 vSearchInput -E0x200 Background" . ListViewBg)
-
-    hIL := IL_Create(10, 5, 0)
-
-    ResultList := MyGui.Add("ListView", "x20 y95 w560 r14 -Multi -Hdr -E0x200 vResultList +LV0x140 Background" .
-        ListViewBg . " c" . FontColor, ["Display", "HWND", "IsShortcut", "IsAdmin"])
-
-    ResultList.SetImageList(hIL)
-    ResultList.ModifyCol(1, 540)
-    ResultList.ModifyCol(2, 0)
-    ResultList.ModifyCol(3, 0)
-    ResultList.ModifyCol(4, 0)
-
-    RefreshAllWindows(ResultList, hIL, iconCache)
-
-    EditBox.OnEvent("Change", (obj, *) => ScheduleSearch(obj, MyGui["ResultList"], hIL))
-    ResultList.OnEvent("DoubleClick", (obj, row) => ActivateWin(obj, row))
-
-    HotIfWinActive("ahk_id " . MyGui.Hwnd)
-    Hotkey("Escape", (*) => CancelSwitcher(MyGui), "On")
-    Hotkey("Down", (*) => MoveLVSelection(MyGui["ResultList"], "Down"), "On")
-    Hotkey("Up", (*) => MoveLVSelection(MyGui["ResultList"], "Up"), "On")
-    Hotkey("Enter", (*) => HandleEnter(MyGui), "On")
-    Hotkey("Delete", (*) => CloseSelectedWindow(MyGui["ResultList"]), "On")
-
-    SetTimer () => CheckWinFocus(MyGui), 100
-
-    MyGui.Show("w600 h450 Center")
 }
 
 CloseSelectedWindow(LV) {
@@ -422,6 +560,9 @@ CancelSwitcher(guiObj) {
 }
 
 CheckWinFocus(guiObj) {
+    ; 浮层重建期间 MyGui 会短暂为 0，而定时器还在按 100ms 触发
+    if (!guiObj)
+        return
     if !WinExist("ahk_id " . guiObj.Hwnd) {
         return
     }
@@ -511,7 +652,10 @@ GetExeIconIndex(filePath, hIL) {
             0x100) {
             hIcon := NumGet(fileinfo, 0, "Ptr")
             if hIcon {
-                return IL_Add(hIL, "HICON:" . hIcon)
+                ; SHGetFileInfo 交出来的图标要由调用方释放，否则每取一个图标就漏一个
+                idx := IL_Add(hIL, "HICON:" . hIcon)
+                DllCall("DestroyIcon", "ptr", hIcon)
+                return idx
             }
         }
     }
@@ -674,7 +818,7 @@ UserRun(Target, Args := "", WorkingDir := "") {
 }
 
 UpdateTheme() {
-    global BgColor, FontColor, AccentColor, ListViewBg, IsDarkMode, FontSize
+    global BgColor, FontColor, AccentColor, ListViewBg, IsDarkMode
     try {
         IsDarkMode := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "AppsUseLightTheme") == 0
@@ -701,7 +845,6 @@ UpdateTheme() {
         FontColor := "333333"
         ListViewBg := MixColor(accentNum, 0xFFFFFF, 0.80)
     }
-    FontSize := 12
 }
 
 MixColor(Color1, Color2, Weight) {
