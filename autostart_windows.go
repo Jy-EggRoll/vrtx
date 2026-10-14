@@ -79,45 +79,61 @@ func repairAutoStartTask() {
 
 // enableAutoStart 创建/覆盖自启动任务，使用任务计划程序以最高权限运行。
 //
-// /TR 的路径必须自带引号：默认可执行文件位于用户目录下，而用户名允许包含
-// 空格（如 C:\Users\John Doe\...），不加引号时 schtasks 会把空格后的部分
-// 当成传入参数，任务会指向一个不存在的路径。
+// 这里不走 schtasks /create，而是用 PowerShell 的 ScheduledTasks 模块一次性提交整份
+// 任务定义，原因是 schtasks 关不掉两项电池相关的默认设置：
+//   - DisallowStartIfOnBatteries（默认开启）会让笔记本在电池供电时登录根本不启动本任务，
+//     任务计划程序只留下事件 326（NO_START_ON_BATTERIES）；
+//   - StopIfGoingOnBatteries（默认开启）会在运行中切到电池时把常驻的 VRTX 直接终止，
+//     对应事件 327。
+//
+// 这两项在 schtasks 命令行里没有任何开关可以覆盖，而 ScheduledTasks 模块能直接给出
+// New-ScheduledTaskSettingsSet 的 -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries。
+// 顺带地，执行时限也能在注册时就设成无限，原先为了补这一项而跑的第二次 PowerShell
+// （clearExecutionTimeLimit）不再需要。
+//
+// 可执行文件路径用环境变量传给脚本，而不是拼进脚本文本：安装路径可能含空格、单引号等
+// 字符，拼字符串就得处理转义，走环境变量可以完全绕开。
 func enableAutoStart() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("定位自身可执行文件失败: %w", err)
 	}
-	cmd := exec.Command("schtasks", "/create", "/TN", taskName, "/TR", `"`+exe+`"`,
-		"/SC", "ONLOGON", "/RL", "HIGHEST", "/DELAY", "0000:10", "/F")
-	hideWindow(cmd)
+	// $ErrorActionPreference='Stop'：让任意一个 cmdlet 失败都变成终止性错误，
+	// 从而以非零退出码体现出来；否则脚本会继续往后跑，失败被淹没在输出里。
+	script := `
+$ErrorActionPreference = 'Stop'
+$exe = $env:VRTX_TASK_EXE
+$user = "$env:USERDOMAIN\$env:USERNAME"
+
+# 动作：就是当前这个可执行文件，不带参数
+$action = New-ScheduledTaskAction -Execute $exe
+
+# 触发器：当前用户登录时启动，延迟 3 秒（PT03S）。这个延迟与 TrafficMonitor 的实现对齐，
+# 不再沿用原来 schtasks 的 /DELAY 0000:10。New-ScheduledTaskTrigger 本身没有延迟参数，
+# 只能在返回的触发器对象上写 Delay 属性
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$trigger.Delay = 'PT03S'
+
+# 主体：当前用户。LogonType Interactive 表示复用已登录会话的交互式令牌，因此不需要密码；
+# RunLevel Highest 对应原来的 /RL HIGHEST
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+
+# 设置只显式给三项：允许电池供电时启动、切到电池后不停止（见函数开头的说明），
+# 以及执行时限 0 即 PT0S（不限制运行时长，替代原先单独设置时限的那趟调用）。
+# 其余保持默认：多实例策略的默认值就是 IgnoreNew，不重复启动，与原先依赖
+# schtasks 默认值时的行为一致，因此不传 -MultipleInstances。
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+
+# -Force：任务已存在时不询问确认，直接覆盖，保证注册是幂等的
+Register-ScheduledTask -TaskName '` + taskName + `' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+`
+	cmd := powershell(script)
+	cmd.Env = append(os.Environ(), "VRTX_TASK_EXE="+exe)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("创建自启动任务失败: %v\n%s", err, string(out))
 	}
-	clearExecutionTimeLimit()
 	return nil
-}
-
-// clearExecutionTimeLimit 把任务的执行时限设为无限。
-//
-// 任务计划程序默认会在任务启动 72 小时后强行停止它（TaskSettings.ExecutionTimeLimit
-// 的官方说明：默认 72 小时，PT0S 表示不限制）。VRTX 是常驻程序，被这样停掉时进程
-// 直接消失：Go 侧没有退出日志，AutoHotkey 的父进程看门狗随即结束脚本，用户只看到
-// 托盘图标不见、快捷键失效，事后在任务计划程序里也只有一个终止码。
-// schtasks /create 没有设置该时限的参数，只能用 PowerShell 补这一步。
-// 这一步失败不影响自启动本身，因此只记警告。
-func clearExecutionTimeLimit() {
-	script := `
-$task = Get-ScheduledTask -TaskName '` + taskName + `' -ErrorAction Stop
-if ($task.Settings.ExecutionTimeLimit -ne 'PT0S') {
-    $task.Settings.ExecutionTimeLimit = 'PT0S'
-    Set-ScheduledTask -TaskName '` + taskName + `' -Settings $task.Settings | Out-Null
-}
-`
-	cmd := powershell(script)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		logWarn("设置自启动任务执行时限失败，任务仍会在启动 72 小时后被强行停止：%v\n%s", err, out)
-	}
 }
 
 // disableAutoStart 删除自启动任务（不存在视为成功）
