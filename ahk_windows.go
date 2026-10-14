@@ -30,7 +30,13 @@ func ahkPaths() (interpreter, script string) {
 	return filepath.Join(dir, "vrtxahk.exe"), filepath.Join(dir, "WindowJump.ahk")
 }
 
-// launchAHK 以管理员权限拉起 AutoHotkey 运行 WindowJump.ahk（触发标准 UAC 授权框）。
+// launchAHK 以管理员权限拉起 AutoHotkey 运行 WindowJump.ahk。
+//
+// 这里的 runas 通常不会弹 UAC：vrtx.exe 自身就带管理员清单，也就是 vrtx.manifest 里
+// requestedExecutionLevel=requireAdministrator 那一项，它由 versioninfo.json 的
+// ManifestPath 经 goversioninfo 编入 PE 资源。既然主程序已经是提权进程，用 runas 拉起
+// AHK 时子进程直接继承现有的提权令牌，不会再弹授权框。只有当 vrtx 自己没提权时
+// （例如有人直接运行不带清单的构建产物）才会弹出 UAC，用户拒绝便走到 seErrAccessDenied 分支。
 //
 // 提权后的子进程不受普通权限的 vrtx 控制，故把主程序 PID 作为首参数传给
 // WindowJump.ahk 内置的看门狗：脚本侧每秒轮询父进程存活，vrtx 退出后自动跟随退出。
